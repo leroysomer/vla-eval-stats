@@ -1,0 +1,15 @@
+# Episode counts of the planned runs, used by scripts/analyze_throughput.py to project
+# GPU-hours from the Step 2 timings. `policies` are entries of configs/policies.yaml.
+# Sizes are those of docs/plan.md, Section 1.
+
+sanity_check_A:
+  description: "Step 3 sanity check: 10 tasks x 10 initial states x 1 seed, policy A"
+  policies: [smolvla]
+  suite: libero_spatial
+  episodes_per_policy: 100
+
+main_grid:
+  description: "Step 4 main grid on libero_spatial: 10 tasks x 50 initial states x 4 seeds"
+  policies: [smolvla, pi05]
+  suite: libero_spatial
+  episodes_per_policy: 2000

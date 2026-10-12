@@ -26,15 +26,17 @@
 VLA papers report success rates on LIBERO, often at 95% or more, and leaderboards rank models that differ by one or two points. **How much of that is noise?** This project measures, on open VLA checkpoints:
 
 1. How uncertain a reported LIBERO success rate really is, and where that uncertainty comes from (tasks, initial states, policy randomness).
-2. How many rollouts it takes to reliably tell two policies apart, and how much a **paired** evaluation design (same initial states for both policies) and **sequential** testing reduce that number.
-3. How success degrades under realistic perturbations (camera, lighting, language, etc.), with uncertainty and multiple-comparison corrections reported properly.
+2. How many rollouts it takes to reliably tell two policies apart, and how much a **paired** evaluation design (same initial states for both policies) reduces that number.
+3. The same question when the evaluator may **stop early**: how soon a **sequential** test decides within a fixed budget, unpaired (STEP) and paired (a sequential McNemar test derived for this project).
+
+The questions are linked: the noise that two policies share (hard tasks, hard initial states) is what RQ1 measures and what pairing removes in RQ2 and RQ3. The exact estimands, tests and figures are fixed in `docs/plan.md`. Perturbations and a leaderboard audit are deliberately left out.
 
 ### Why it matters (for the README and interviews)
-Robot learning has started treating evaluation as a statistics problem (TRI's best-practices paper, STEP, N-SCORE). This project applies those ideas to **open VLA models on the most-used simulation benchmark**, adds a variance decomposition and a paired-design analysis, and ships a small reusable toolkit.
+Robot learning has started treating evaluation as a statistics problem (TRI's best-practices paper, STEP, N-SCORE). This project applies those ideas to **open VLA models on the most-used simulation benchmark**, adds a variance decomposition, a paired-versus-unpaired power analysis and a paired sequential test, and ships a small reusable toolkit.
 
 ### Honest positioning
 - This is an **evaluation study plus toolkit**, not a new method. Cite prior work clearly (Section 9).
-- The original contributions are: empirical numbers on open checkpoints, the variance decomposition, the paired-vs-unpaired power comparison, and the robustness study with proper uncertainty.
+- The original contributions are: empirical numbers on open checkpoints, the variance decomposition, the paired-vs-unpaired power comparison it explains, and a paired sequential test with exact error control.
 
 ### What it shows a recruiter
 Hands-on VLA models, a robot simulator, long unattended GPU evaluation runs on a remote machine, and the evaluation rigor and uncertainty quantification that set your profile apart.
@@ -46,13 +48,12 @@ Hands-on VLA models, a robot simulator, long unattended GPU evaluation runs on a
 | Component | Choice | Notes |
 |---|---|---|
 | Framework | [LeRobot](https://github.com/huggingface/lerobot) | Policies, LIBERO env wrapper, `lerobot-eval` CLI |
-| Benchmark | [LIBERO via LeRobot](https://huggingface.co/docs/lerobot/en/libero) | Suites: `libero_spatial`, `libero_object`, `libero_goal`, `libero_10`, `libero_90` |
-| Perturbations | [LIBERO-Plus](https://github.com/sylvestf/LIBERO-plus), [LeRobot integration](https://github.com/huggingface/lerobot/blob/main/docs/source/libero_plus.mdx) | 7 perturbation dimensions; `--env.type=libero_plus` |
-| Policy A | [`lerobot/smolvla_libero`](https://huggingface.co/lerobot/smolvla_libero) | 450M parameters, Apache-2.0. Verify suites and expected success before use |
-| Policy B | A π0.5 LIBERO fine-tuned checkpoint (`pi05_libero_finetuned` in the LeRobot docs) | Larger (about 3B). Verify the exact Hub ID and GPU memory needs |
-| Stats | `scipy.stats` (`barnard_exact`, `fisher_exact`, `beta`), `statsmodels` (`proportion_confint`, `mcnemar`) | Plus your own code for bootstrap and power |
+| Benchmark | [LIBERO via LeRobot](https://huggingface.co/docs/lerobot/en/libero) | Suite used: `libero_spatial` |
+| Policy A, A′ | [`lerobot/smolvla_libero`](https://huggingface.co/lerobot/smolvla_libero) | 450M parameters, Apache-2.0. A′ is the same checkpoint with `n_action_steps = 10` instead of 50 |
+| Policy B | `lerobot/pi05_libero_finetuned` | Larger (about 3B), about 9 GB of GPU memory. Run with `compile_model=false` |
+| Stats | `scipy.stats.barnard_exact`, `statsmodels` (`proportion_confint`, `mcnemar`), [`sequentialized_barnard_tests`](https://github.com/TRI-ML/sequentialized_barnard_tests) (STEP) | Plus your own code for variance components, bootstrap, power and the sequential McNemar test. STEP is CC BY-NC 4.0: use it as a dependency, never copy its code into this repo |
 | Data | pandas + parquet | One row per episode |
-| Plots | matplotlib | Forest plots, power curves, heatmaps |
+| Plots | matplotlib | Four figures: variance shares and intervals, power curves, rollouts versus gap, sequential stopping curves |
 | Environment | [uv](https://docs.astral.sh/uv/) (`pyproject.toml` + `uv.lock`) | `source env.sh`, then `uv run ...` |
 | Compute | One workstation, `verdier.polytechnique.fr`, reached over SSH: 1× NVIDIA RTX A5000 (24 GB), 16 CPU cores, 62 GB RAM. No Slurm: jobs run directly on the machine inside `tmux` | Headless rendering: `export MUJOCO_GL=egl` (set by `env.sh`) |
 
@@ -82,13 +83,10 @@ vla-eval-stats/
 ├── env.sh                     # cache locations on /Data, MUJOCO_GL=egl
 ├── configs/
 │   ├── policies.yaml          # policy IDs + inference overrides
-│   ├── grid_main.yaml         # suites, tasks, init states, seeds
-│   └── grid_robustness.yaml   # LIBERO-Plus perturbation grid
-├── envs/
-│   └── libero_plus/           # separate uv env (Step 8): LIBERO-Plus replaces vanilla LIBERO
+│   └── grid_main.yaml         # suite, tasks, init states, seeds
 ├── src/evalstats/
 │   ├── harness/               # run episodes, log per-episode results, resume logic
-│   ├── stats/                 # intervals, tests, bootstrap, power, sequential
+│   ├── stats/                 # variance components, intervals, tests, power, sequential
 │   └── plots/
 ├── scripts/                   # thin CLIs: run_grid.py, analyze_*.py, make_figures.py,
 │                              # and shell launchers: smoke_test.sh, run_grid.sh (run inside tmux)
@@ -101,7 +99,7 @@ vla-eval-stats/
 └── docs/
     ├── plan.md                # estimands and research questions (Step 0)
     ├── lab_notebook.md
-    └── report.md              # 3 to 5 page write-up (Step 10)
+    └── report.md              # write-up of about 5 pages (Step 9)
 ```
 
 ---
@@ -116,9 +114,9 @@ vla-eval-stats/
 - Read (skim is fine): TRI's *Robot Learning as an Empirical Science* paper, the TRI blog post on statistical thinking, STEP, and the LIBERO-Plus paper (links in Section 9).
 - Write `docs/plan.md` with:
   - **Estimands.** For a policy and a suite, define success rate as the average over (a) the fixed 10 tasks and the benchmark's fixed initial states, versus (b) a population of "tasks like these". These lead to different confidence intervals: stratified/fixed-effects for (a), clustered/random-effects for (b). State which one each analysis uses.
-  - **The three research questions** from Section 1, rewritten in your words.
+  - **The research questions** from Section 1, rewritten in your words.
   - **The success criterion** (LIBERO's built-in task success flag) and the maximum episode length, fixed in advance.
-  - **The comparisons planned** (which policy pairs, which perturbations), written down before seeing results, to avoid fishing.
+  - **The comparisons planned** (which policy pairs), written down before seeing results, to avoid fishing.
 
 **Deliverables:** `docs/plan.md`.
 **Done when:** each research question names its estimand, its test or interval, and the figure that will answer it.
@@ -177,174 +175,165 @@ vla-eval-stats/
 
 ---
 
-### Step 3: Choose the policies and size the main grid
+### Step 3: Policies, grid and sanity check
 
-**Goal:** pick comparisons with interesting gaps (big, small and near-zero) and a grid that fits the compute budget.
+**Goal:** the three policy entries and the grid of `docs/plan.md` exist as configs, and Policy A behaves as published.
 
-**Policies (minimum set)**
-- **A:** SmolVLA LIBERO checkpoint, default inference settings.
-- **A′:** the same checkpoint with **one inference setting changed**, for example the number of actions executed per predicted chunk (check the exact config field, such as `n_action_steps`, in the installed SmolVLA config). This gives a realistic **small-gap ablation**, the kind of difference papers report.
-- **B:** a stronger, larger model (π0.5 LIBERO fine-tune, `lerobot/pi05_libero_finetuned`). It loads in about 10 GB of the A5000's 24 GB.
+**Policies** (fixed in `docs/plan.md`, Section 1)
+- **A:** `lerobot/smolvla_libero`, default inference settings (`n_action_steps = 50`).
+- **A′:** the same checkpoint with `n_action_steps = 10`. A realistic **small-gap ablation**. The value is fixed in advance and is not tuned on results.
+- **B:** `lerobot/pi05_libero_finetuned` with `compile_model = false`.
 
-**Grid design**
-- Start with **one suite**: `libero_spatial`, or `libero_10` if you want harder, long-horizon tasks with more room below 100%. Add a second suite if the budget allows.
-- Use all 10 tasks × as many initial states as affordable (LIBERO provides 50 per task) × **at least 2 seeds**.
-- Run **the same (task, initial state, seed) keys for every policy**. This is the paired design.
-- Example size: 10 tasks × 50 initial states × 2 seeds = 1,000 episodes per policy, 3,000 in total. Scale it to the Step 2 cost table.
+**Grid**
+- `libero_spatial`, 10 tasks × 50 initial states × 4 seeds = **2,000 episodes per policy**, 6,000 in total.
+- **The same (task, initial state, seed) keys for every policy.** This is the paired design.
 
-**Sanity check:** before the big run, do a 10-episodes-per-task evaluation of Policy A and compare it with the success reported on the model card or in the SmolVLA paper. If it is far off, debug the setup (control mode, image preprocessing, versions) before going further.
+**Tasks**
+- Add the A′ entry to `configs/policies.yaml` and write `configs/grid_main.yaml`.
+- Time 20 episodes of A′ (more inference calls per episode than A) and update the cost table.
+- **Sanity check:** run Policy A on 10 initial states per task (seed 0), 100 episodes, and compare with the success reported on the model card or in the SmolVLA paper. The Step 2 timing run gave 13/20, well below published numbers. If the gap remains, debug the setup (the third camera the checkpoint expects, the 280-step limit, control mode, image preprocessing) before going further. These 100 episodes are part of the grid and are not rerun.
 
-**Deliverables:** `configs/policies.yaml`, `configs/grid_main.yaml`, and the sanity-check result in the notebook.
-**Done when:** the sanity check is close to the published numbers (or the difference is understood and documented) and the grid fits the budget.
+**Deliverables:** `configs/policies.yaml`, `configs/grid_main.yaml`, the sanity-check result and the updated cost table in the notebook.
+**Done when:** the sanity check is close to the published numbers (or the difference is understood and documented) and the projected cost of the grid is confirmed with me.
 
 ---
 
 ### Step 4: Run the main grid
 
-**Goal:** the full per-episode dataset for the main analyses.
+**Goal:** the full per-episode dataset.
 
 **Tasks**
-- Split the grid into **shards** (for example one policy × one task). Each shard writes its own parquet file, merged afterwards. `scripts/run_grid.sh` walks through the shards one after another on the single GPU, inside `tmux`, with one log file per shard in `logs/`.
-- A shard that crashes must not stop the queue: log the failure, move on to the next shard, and let a second pass of the same command pick up what is missing (the harness is idempotent, Step 2).
-- Optionally run two or three shards at once if GPU memory and the 16 CPU cores allow it; measure whether that actually raises throughput before relying on it.
-- Log failures (crashes, timeouts) separately from task failures. A crashed episode is missing data, not a task failure.
-- Save videos for a small random sample (for example 1 in 50 episodes, plus all episodes of one task) for qualitative failure analysis.
+- Split the grid into **shards** (one policy × one task). Each shard writes its own parquet file. `scripts/run_grid.sh` walks through the shards one after another on the single GPU, with one log file per shard in `logs/`.
+- A shard that crashes must not stop the queue: log the failure, move on, and let a second pass of the same command pick up what is missing (the harness is idempotent, Step 2).
+- Log crashes and timeouts separately from task failures. A crashed episode is missing data, not a task failure.
+- No videos are saved during the grid: any episode can be re-run from its key later (Step 7).
 - After the run, check completeness: every planned key is present exactly once.
 
-**Deliverables:** `results/raw/main/*.parquet`, `results/tables/main_completeness.csv`, sampled videos.
-**Done when:** completeness is at least 99%, and any missing keys are listed with a reason.
+**Deliverables:** `results/raw/main/*.parquet`, `results/tables/main_completeness.csv`.
+**Done when:** completeness is 100%, or any missing key is listed with a reason.
 
-**Pitfalls:** do not look at policy comparisons until the run is complete (no peeking, which inflates false positives with fixed-sample tests). The run takes hours to days on one GPU and the machine can be rebooted or used by someone else: rely on resumability, check progress with `tmux attach` and `nvidia-smi`, and copy `results/raw/` off `/Data` when it finishes.
+**Pitfalls:** do not look at policy comparisons until the run is complete. The machine can be rebooted or used by someone else: rely on resumability, check `nvidia-smi` before launching, and copy `results/raw/` off `/Data` when it finishes.
 
 ---
 
 ### Step 5: Build and validate the statistics toolkit
 
-**Goal:** a small, tested library in `src/evalstats/stats/`. Every method is checked by simulation before it touches real data.
+**Goal:** a small, tested library in `src/evalstats/stats/` containing only what `docs/plan.md` uses. Every method is checked on simulated data with known truth before it touches real data.
 
-**Methods to implement**
-- **Intervals for one success rate:**
-  - Wilson and Clopper-Pearson intervals (`statsmodels.stats.proportion.proportion_confint`).
-  - Bayesian Beta posterior with a Jeffreys or uniform prior, reported as a credible interval and plotted as a violin.
-  - **Stratified** estimate across tasks (fixed-effects estimand) and **cluster bootstrap** (resample tasks, then initial states within tasks) for the random-effects estimand.
-- **Comparing two policies:**
-  - Unpaired: Barnard's exact test (`scipy.stats.barnard_exact`) and Fisher's exact test.
-  - Paired on (task, initial state, seed): McNemar's exact test (`statsmodels.stats.contingency_tables.mcnemar(exact=True)`). Optionally, a stratified version (Cochran-Mantel-Haenszel across tasks).
-  - Multiple comparisons: Holm-Bonferroni correction; compact letter display for ranking more than 2 policies.
-- **Sequential testing:** use TRI's STEP code if it can be installed and fits Bernoulli outcomes (check [the project page](https://tri-ml.github.io/step/)). Otherwise implement a simpler anytime-valid test (for example a mixture sequential probability ratio test) and say so clearly.
-- **Power by resampling:** given the per-episode pool for two policies, repeatedly draw evaluations of size n under a given protocol (unpaired, paired, sequential), run the test, and record the rejection rate. This is the empirical power at sample size n.
+**Methods**
+- **Variance components** of the nested design (task, initial state within task, seed within initial state): unbiased moment estimators, for one policy and for the covariance between two policies.
+- **Intervals for one success rate:** Clopper-Pearson (`statsmodels.stats.proportion.proportion_confint`, `method="beta"`), and a percentile **bootstrap that resamples initial states within each task**, keeping the seeds of a state together. The same bootstrap gives the interval for a gap between two policies.
+- **Tests:** Barnard's exact test (`scipy.stats.barnard_exact`) for the unpaired design, McNemar's exact test (`statsmodels.stats.contingency_tables.mcnemar(exact=True)`) for the paired design.
+- **Power by resampling:** draw evaluations of size n from the per-episode pool under each design, run the test, record the rejection rate.
+- **Sample-size formula:** n ≈ (z₁₋α/₂ + z₁₋β)² σ² / δ², with the paired and unpaired σ² of `docs/plan.md`.
+- **Sequential McNemar test** (`docs/plan.md`, Section 5): the exact stopping boundary on the walk of discordant pairs, with risk spent uniformly over the rollout budget. Written from scratch.
+- **STEP wrapper:** add `sequentialized_barnard_tests` to `pyproject.toml`, check its API and Python-version support against the installed package, synthesize the policy for n_max = 500 once and cache it, and expose it in both directions at α/2.
 
-**Validation tests in `tests/`** (this is where your UQ background shows):
-- **Coverage:** simulate Bernoulli data with known p (including p = 0.95 and 0.98, where Wald intervals fail) and check that each interval's empirical coverage is close to 95%. Report the table.
-- **Type-I error:** simulate two identical policies and check that each test rejects at about 5%, or less for exact tests.
-- **Power sanity:** for a known gap, analytic power and resampled power roughly agree.
+**Simulator for validation:** a nested Bernoulli model with chosen between-task, between-initial-state and between-seed variances, and a chosen correlation between two policies.
+
+**Validation tests in `tests/`**
+- **Recovery:** the moment estimators return the chosen components.
+- **Coverage:** the bootstrap interval covers the true rate about 95% of the time; the Clopper-Pearson interval departs from 95% in the direction the design effect predicts.
+- **Type-I error:** with two identical policies, each test rejects at most 5% of the time.
+- **Power:** resampled power agrees with the formula for a known gap.
+- **Sequential McNemar:** rejects a true null at most 5% of the time for discordance rates from 2% to 50%; with all the risk placed at the last step it reproduces McNemar's exact test.
+- **STEP:** run in both directions at α/2, rejects a true null at most 5% of the time on independent Bernoulli sequences.
 
 **Deliverables:** `src/evalstats/stats/`, `tests/`, `results/tables/coverage.csv`, `results/tables/type1.csv`.
-**Done when:** all tests pass and the coverage and Type-I tables look right. Note in the README which intervals under-cover at high success rates; that table is a result in itself.
+**Done when:** all tests pass and both tables look right.
+
+**Pitfalls:** Barnard's test is slow at large n and is called thousands of times in the power loop. Its outcome depends only on the two success counts, so compute the rejection region once per n and look it up. STEP is not tested by its authors beyond n_max = 500; do not raise the budget. Synthesizing its policy is CPU work, but time it before running it in a loop.
 
 ---
 
 ### Step 6: Analysis 1: how uncertain is one success rate?
 
-**Goal:** answer RQ1 with numbers and figures.
+**Goal:** answer RQ1 as specified in `docs/plan.md`, Section 3.
 
 **Tasks**
-- For each policy: point estimate, Wilson interval, Beta posterior, stratified interval and cluster-bootstrap interval. Compare the widths of the naive pooled interval and the cluster-aware one, and explain the difference.
-- **Variance decomposition** of the success indicator Y with the law of total variance:
+- For each policy, estimate the three variance components:
 
-  Var(Y) = Var_task( E[Y | task] ) + E_task[ Var_init( E[Y | task, init] ) ] + E[ Var(Y | task, init) ]
+  p(1 − p) = σ²_task + σ²_init + σ²_seed
 
-  The three terms are **between tasks**, **between initial states within a task**, and **within (seed / policy randomness)**. Estimate them from the grid; the last term needs at least 2 seeds per initial state. If the policy turns out deterministic given an initial state, say so: it means seeds add no information, and only initial states do.
-- **Protocol check:** LeRobot recommends 10 episodes per task for LIBERO, and many papers use 50. For both, compute the typical interval half-width around the observed success rate. One sentence answer: "at 10 episodes per task, a reported X% is really X ± Y%".
+  **between tasks**, **between initial states within a task**, and **between seeds within an initial state**, with bootstrap intervals.
+- Compute the **design effect** (true variance of the estimate over the binomial variance) for the grid and for the two protocols in common use, 10 and 50 episodes per task with one seed each.
+- For each policy: point estimate, Clopper-Pearson interval and bootstrap interval. Explain the difference in width with the design effect.
+- One-sentence answer: "a reported X% on `libero_spatial` at 10 episodes per task is really X ± Y points".
 
-**Figures**
-- Forest plot: each policy's success with the different intervals side by side.
-- Stacked bar: variance decomposition per policy.
-- Per-task success heatmap with uncertainty (or small-multiple Beta violins).
+**Figure 1** (two panels): variance shares per policy as stacked bars; success rate per policy with both intervals.
+**Table 1:** components, design effect, half-width Y for the two protocols.
 
-**Deliverables:** `results/tables/rq1_*.csv`, `figures/rq1_*.png`, notebook entry.
-**Done when:** every figure is reproducible from one script, and the one-sentence answer is written.
+**Deliverables:** `results/tables/rq1_*.csv`, `figures/rq1.png`, notebook entry.
+**Done when:** the figure and the table are rebuilt by one script, and the one-sentence answer is written.
 
 ---
 
 ### Step 7: Analysis 2: how many rollouts to tell two policies apart?
 
-**Goal:** answer RQ2. This is the headline result.
+**Goal:** answer RQ2 as specified in `docs/plan.md`, Section 4. This is the headline result.
 
-**Tasks**
-- For each policy pair (A vs A′, A vs B), compute the observed gap and its interval.
-- **Power curves:** empirical power as a function of total episodes n for three protocols:
-  1. **Unpaired fixed-n** (Barnard).
-  2. **Paired fixed-n** (McNemar on matched initial states and seeds).
-  3. **Sequential** (STEP or your anytime-valid test): report the average number of episodes used before stopping, not just power.
-- Headline numbers: the **n needed for 80% power** under each protocol, and the **percentage saved** by pairing and by sequential testing.
-- **Generalize beyond the observed gaps:** use a simple simulation model (task-level success rates from the data, plus a shifted copy for the second policy) to draw a chart of "episodes needed versus true gap" for gaps of 1, 2, 5 and 10 points around a 90% baseline. This is the chart people will screenshot.
-- Look at **discordant pairs**: when A succeeds and A′ fails on the same initial state, is it a few hard initial states or spread out? Watch 5 to 10 discordant videos and write down failure modes in plain words (missed grasp, wrong object, timeout, etc.).
+**Tasks**, for A vs A′ and for A vs B
+- The observed gap on the full grid with its bootstrap interval.
+- The discordance rates (only A succeeds, only the other succeeds) and the covariance between the two policies, split into shared task, shared initial state and shared seed.
+- **Power curves** as a function of n, the number of rollouts per policy, for two designs:
+  1. **Unpaired** (independent keys for each policy, Barnard).
+  2. **Paired** (same keys for both policies, McNemar).
+- The **n needed for 80% power** under each design, from the curves and from the formula, and the **percentage saved** by pairing.
+- **Null control:** A against itself on the same initial states with different seeds. Both tests must reject at most 5% of the time.
+- **Beyond the observed gaps:** a chart of "rollouts needed versus true gap" for gaps of 1, 2, 5 and 10 points, from the formula, holding the discordance rate at the value measured for A vs A′. State the assumption on the chart.
+- Re-run 10 **discordant** episodes of A vs A′ with video and describe the failure modes in one paragraph (missed grasp, wrong object, timeout, etc.).
 
-**Figures**
-- Power-versus-n curves, one line per protocol, with the 80% line marked.
-- "Episodes needed versus gap" chart.
-- 2×2 discordance table and a short gallery of failure frames.
+**Figure 2:** power versus n, one panel per comparison, one curve per design, formula overlaid, 80% line marked.
+**Figure 3:** rollouts needed versus gap.
+**Table 2:** gaps, discordance, covariance split, n at 80% power.
 
 **Deliverables:** `results/tables/rq2_*.csv`, `figures/rq2_*.png`, failure-mode notes.
-**Done when:** you can state, with numbers from the data: "Detecting a 2-point gap at 80% power takes about N rollouts unpaired, M paired, and K on average with sequential testing."
+**Done when:** you can state, with numbers from the data: "Detecting a 2-point gap at 80% power takes about N rollouts per policy unpaired and M paired."
 
 ---
 
-### Step 8: Analysis 3: robustness under perturbations (recommended)
+### Step 8: Analysis 3: how many rollouts when the evaluator may stop early?
 
-**Goal:** answer RQ3 with proper uncertainty. This is the most "robotics" part of the project.
+**Goal:** answer RQ3 as specified in `docs/plan.md`, Section 5. No new rollouts: everything is resampled from the main grid.
+
+**Setting:** budget of 500 rollouts per policy, two-sided α = 0.05, risk spent uniformly over the budget, for A vs A′ and for A vs B.
 
 **Tasks**
-- Create a **separate** uv environment in `envs/libero_plus/` (its own `pyproject.toml` and `.venv`), because LIBERO-Plus replaces vanilla LIBERO. Follow the LeRobot LIBERO-Plus doc: system packages, pinned `robosuite==1.4.1`, the assets download from Hugging Face, `--env.hard_reset=true` for reproducibility.
-- Choose a budget-sized subset: the same suite as the main grid, the 7 perturbation dimensions (object layout, camera viewpoint, robot initial state, language, lighting, background, sensor noise), at one or two levels each.
-- For each policy × perturbation: the success rate with its interval, and the **drop from the unperturbed baseline** with a paired test where the design allows it. Apply Holm correction across the 7 dimensions.
-- Report which degradations are **statistically significant** and which are within noise. That distinction is exactly what most robustness tables leave out.
+- Draw 5,000 simulated evaluations per comparison and per design from the grid: independent keys for each policy (unpaired), the same keys for both (paired).
+- Run **STEP** on the unpaired sequences and the **sequential McNemar test** on the paired ones. Record the step at which each stops and its decision.
+- Compute the probability of having rejected by step n, the **power within the budget**, and the **expected number of rollouts** before stopping. Put them next to the power of Barnard and McNemar at n = 500 from Step 7.
+- **Null control:** A against itself, as in Step 7, for both sequential tests.
+- State the result whatever it is. Reaching the budget without a decision is not evidence that two policies are equal.
 
-**Fallback** if LIBERO-Plus cannot be installed on the workstation (system packages need root, which you do not have): implement two perturbations yourself as env or observation wrappers on vanilla LIBERO: (1) image-space photometric noise and brightness shift, and (2) paraphrased or emptied language instructions. Keep the same statistics.
+**Figure 4:** probability of having rejected versus n, one panel per comparison, one curve per sequential design, fixed-n power at 500 marked.
+**Table 3:** power within budget and expected rollouts for the four designs (unpaired or paired × fixed or sequential).
 
-**Figures**
-- Heatmap: policy × perturbation, colored by drop, with markers for significant drops after correction.
-- Forest plot of drops with intervals.
+**Deliverables:** `results/tables/rq3_*.csv`, `figures/rq3.png`, notebook entry.
+**Done when:** you can state, with numbers from the data: "With a budget of 500 rollouts per policy, A vs B is decided after about N rollouts unpaired and M paired, and A vs A′ is decided in X% of evaluations unpaired and Y% paired."
 
-**Deliverables:** `configs/grid_robustness.yaml`, `results/raw/robustness/`, `figures/rq3_*.png`.
-**Done when:** every cell in the heatmap has an interval behind it, and the corrected significance is shown.
-
----
-
-### Step 9: Optional: leaderboard audit
-
-**Goal:** a short, attention-grabbing sanity check of published comparisons.
-
-**Tasks**
-- Collect reported LIBERO success rates for several well-known VLAs from their papers or model cards, **with the number of evaluation episodes they used**. Record the source of every number in `results/tables/leaderboard_sources.csv`. Skip any number whose episode count you cannot find.
-- For each adjacent pair on the leaderboard, compute whether the gap is distinguishable at that number of episodes (an unpaired test, since you lack their per-episode data).
-- Report the share of adjacent gaps that are within noise. Word it carefully: "not distinguishable from these reported numbers alone", not "these papers are wrong".
-
-**Deliverables:** sourced table and one figure.
-**Done when:** every number links to a source.
+**Fallback:** if STEP cannot be installed or run at n_max = 500, report the sequential McNemar test against the two fixed-n tests only, and say that the unpaired sequential cell is missing.
 
 ---
 
-### Step 10: Package it (README, report, reproducibility)
+### Step 9: Package it (README, report, reproducibility)
 
 **Goal:** a repo a screener understands in 30 seconds and an engineer can rerun.
 
 **README structure**
 1. **One-line hook** with the headline number from Step 7, for example: "On LIBERO, telling apart two VLA policies 2 points apart takes about N rollouts; pairing initial states cuts that by X%."
-2. **Headline figure** (the "episodes needed versus gap" chart) and a GIF of a rollout and a failure.
-3. **Key findings:** 3 to 5 bullets, each tied to a figure.
-4. **Recommendations for practitioners:** for example, "report Wilson or Beta intervals, pair initial states, use at least N episodes per task for gaps under Y points".
+2. **Headline figure** (rollouts needed versus gap) and a GIF of a rollout and a failure.
+3. **Key findings:** 3 or 4 bullets, each tied to a figure.
+4. **Recommendations for practitioners**, drawn from the results.
 5. **Reproduce:** environment files, one command per step, expected GPU-hours.
 6. **Toolkit usage:** a 10-line example of using `evalstats` on any per-episode CSV.
-7. **Limitations:** one benchmark, simulation only, a few checkpoints, inference-setting ablation as a proxy for "two policies".
+7. **Limitations:** one suite, simulation only, three policy variants, power figures and stopping times are plug-in estimates, one sequential budget.
 8. **References.**
 
 **Also**
-- `docs/report.md`: a 3 to 5 page write-up (question, setup, methods, results, limitations). Optionally turn it into a short blog post or arXiv-style PDF.
-- A single `make reproduce-figures` (or script) that rebuilds every figure from `results/`.
+- `docs/report.md`: a write-up of about 5 pages built around four figures and three tables (question, setup, methods including the derivation of the sequential McNemar test, results, limitations).
+- One script that rebuilds every figure from `results/`.
 - Clean commit history, MIT license, CI that runs the unit tests.
-- Optionally, contribute back: the LeRobot issue tracker already discusses putting structured evaluation results into model cards ([issue #4481](https://github.com/huggingface/lerobot/issues/4481)). A small, well-scoped PR (for example per-episode results in the eval output, if missing) would be a strong signal.
+- Optionally, contribute back: `lerobot-eval` drops per-episode seeds and episode lengths and does not take the initial state as an input (Step 2). A small PR on one of these would be a strong signal ([issue #4481](https://github.com/huggingface/lerobot/issues/4481) discusses structured evaluation results).
 
 **Deliverables:** README, report, figures, tagged release `v1.0`.
 **Done when:** a fresh clone plus the documented commands rebuilds the figures from the saved results.
@@ -355,20 +344,20 @@ vla-eval-stats/
 
 | Level | Steps | What you can claim |
 |---|---|---|
-| **Minimum viable** | 0 to 7, one suite, policies A and A′ | Uncertainty, variance decomposition, paired vs unpaired power |
-| **Target** | + Policy B, + Step 8 | Adds robustness with proper statistics |
-| **Stretch** | + second suite, + Step 9, + upstream PR | Leaderboard audit, open-source contribution |
-
-You can apply to jobs as soon as the minimum viable level is done. Link the repo as "ongoing" before that if needed.
+| **Minimum viable** | 0 to 7 with policies A and A′ | Variance decomposition, paired vs unpaired power on a small gap |
+| **Target** | + Policy B | The same result on a large gap |
+| **Full** | + Step 8 | Sequential testing, unpaired and paired, with a test of your own |
+| **Later, as separate work** | perturbations; leaderboard audit | See "Out of scope" in `docs/plan.md` |
 
 ---
 
-## 6. Compute and time estimates (to be replaced by Step 2 measurements)
+## 6. Compute and time estimates
 
-- The main grid at the example size is a few thousand episodes. The real cost depends on the throughput measured in Step 2; do not launch before filling in the cost table.
-- All compute is one RTX A5000 on verdier, so GPU-hours equal wall-clock hours and the policies run one after the other. Size the grid to what fits in a few days of unattended running.
-- π0.5 loads in about 10 GB of the 24 GB. If it turns out too slow for the budget, use a second SmolVLA variant as Policy B and say so.
-- The statistics (Steps 5 to 7) run on a laptop once the parquet files exist.
+Measured in Step 2 (`results/tables/throughput.csv`): about 630 episodes per GPU-hour for SmolVLA and 740 for π0.5 on `libero_spatial`.
+
+- Main grid: 2,000 episodes per policy is about 3 to 5 GPU-hours for A and for B. A′ is slower (more inference calls per episode) and is timed in Step 3.
+- All compute is one RTX A5000 on verdier, so GPU-hours equal wall-clock hours and the policies run one after the other.
+- The statistics (Steps 5 to 8) need no GPU once the parquet files exist. The one unknown is the time to synthesize the STEP policy for n_max = 500.
 
 ---
 
@@ -376,15 +365,14 @@ You can apply to jobs as soon as the minimum viable level is done. Link the repo
 
 | Risk | Fallback |
 |---|---|
-| LeRobot eval does not expose per-episode results or initial-state control | Thin wrapper around the eval loop (Step 2) |
-| Published success not reproduced | Debug control mode, image preprocessing and versions; if it remains, document the gap and continue (the statistics still hold for what you measured) |
-| Policy A is near 100% on the chosen suite (little variance to study) | Switch to `libero_10` (long-horizon, lower success) |
+| Published success not reproduced | Debug the third camera, step limit, control mode and image preprocessing; if it remains, document the gap and continue (the statistics still hold for what you measured) |
+| A policy is near 100% (little variance to study) | Report it as is; consider `libero_10` as separate, later work |
+| The A vs A′ gap is near zero | Report it: the power analysis and the "rollouts versus gap" chart do not depend on the observed gap being large |
+| STEP cannot be installed, or fails at n_max = 500 | Report the sequential McNemar test against the fixed-n tests only (Step 8 fallback) |
 | SSH session drops during a long run | Always launch inside `tmux`; logs in `logs/` |
 | Machine rebooted, or GPU taken by another user, mid-run | Resumable harness: rerun the same command; check `nvidia-smi` before launching |
 | `/Data` is local to verdier and may be wiped | Code and `results/tables/` in git; copy `results/raw/` elsewhere after each long run |
 | Home quota (30 GB) fills up | Keep every cache on `/Data` via `env.sh` |
-| LIBERO-Plus install fails | Two home-made perturbations (Step 8 fallback) |
-| STEP code unusable | Simple anytime-valid sequential test, clearly labeled |
 
 ---
 
@@ -393,12 +381,13 @@ You can apply to jobs as soon as the minimum viable level is done. Link the repo
 **CV entry (template; replace the brackets with real results):**
 
 > **Robot Learning Project: Statistically Rigorous Evaluation of VLA Policies** (GitHub)
-> - Evaluated open vision-language-action policies (SmolVLA, π0.5) on [N] simulated LIBERO manipulation rollouts on a remote GPU workstation; decomposed success-rate variance into task, initial-state and policy-noise components
-> - Showed that pairing initial states [cuts the rollouts needed to detect a 2-point gap by X%]; quantified robustness under 7 perturbation types with multiple-comparison-corrected tests; released a tested evaluation toolkit
+> - Evaluated open vision-language-action policies (SmolVLA, π0.5) on 6,000 simulated LIBERO manipulation rollouts on a remote GPU workstation; decomposed success-rate variance into task, initial-state and policy-noise components
+> - Showed that pairing initial states [cuts the rollouts needed to detect a 2-point gap by X%], as predicted by the variance decomposition
+> - Derived a paired sequential test with exact false-positive control and compared it with TRI's STEP: [decides in N rollouts on average against M]; released a tested evaluation toolkit
 
-**Interview story (2 minutes):** the same "diagnose before you build" instinct as NYGC. Robot learning compares policies on noisy, expensive rollouts. You measured how noisy those comparisons are and how to make them cheaper and more reliable, using the uncertainty quantification you studied at Polytechnique.
+**Interview story (2 minutes):** the same "diagnose before you build" instinct as NYGC. Robot learning compares policies on noisy, expensive rollouts. You measured where the noise comes from and showed how much of it a paired design removes, using the uncertainty quantification you studied at Polytechnique.
 
-**Questions to be ready for:** why Wilson over Wald at high success rates; fixed versus random effects for tasks; why peeking breaks fixed-sample tests; what pairing assumes; how this would change on a real robot (fewer episodes, non-stationary resets, so sequential testing matters even more).
+**Questions to be ready for:** why an exact interval at high success rates; fixed versus random effects for tasks; why repeated seeds on one initial state are not independent episodes; what pairing assumes; why peeking breaks fixed-sample tests and how spending the error over time repairs it; why the paired sequential test has no nuisance parameter while STEP does; how this would change on a real robot (initial states cannot be matched exactly, fewer episodes, so sequential testing matters more).
 
 ---
 
@@ -406,9 +395,9 @@ You can apply to jobs as soon as the minimum viable level is done. Link the repo
 
 - Kress-Gazit et al., *Robot Learning as an Empirical Science: Best Practices for Policy Evaluation* (2024): [arXiv:2409.09491](https://arxiv.org/abs/2409.09491)
 - TRI blog, *Statistical Thinking for Robot Policy Evaluation: From Rigorous A/B Testing to Effective Visualization*: [Medium](https://medium.com/toyotaresearch/statistical-thinking-for-robot-policy-evaluation-from-rigorous-a-b-testing-to-effective-0ae886fbd68d)
-- Snyder et al., *Is Your Imitation Learning Policy Better than Mine? Policy Comparison with Near-Optimal Stopping* (STEP): [arXiv:2503.10966](https://arxiv.org/abs/2503.10966), [code](https://tri-ml.github.io/step/)
+- Snyder et al., *Is Your Imitation Learning Policy Better than Mine? Policy Comparison with Near-Optimal Stopping* (STEP): [arXiv:2503.10966](https://arxiv.org/abs/2503.10966), [code](https://tri-ml.github.io/step/). Used as the unpaired sequential test in Step 8.
+- Lan and DeMets, *Discrete sequential boundaries for clinical trials*, Biometrika 70(3), 1983. The alpha-spending idea behind the sequential McNemar test.
 - *Beyond Binary Success: Sample-Efficient and Statistically Rigorous Robot Policy Comparison* (N-SCORE): [arXiv:2603.13616](https://arxiv.org/abs/2603.13616)
-- *LIBERO-Plus: In-depth Robustness Analysis of Vision-Language-Action Models*: [arXiv:2510.13626](https://arxiv.org/abs/2510.13626), [code](https://github.com/sylvestf/LIBERO-plus)
+- *LIBERO-Plus: In-depth Robustness Analysis of Vision-Language-Action Models*: [arXiv:2510.13626](https://arxiv.org/abs/2510.13626). Cited as future work.
 - LeRobot LIBERO docs: [huggingface.co/docs/lerobot/en/libero](https://huggingface.co/docs/lerobot/en/libero)
-- LeRobot LIBERO-Plus docs: [GitHub](https://github.com/huggingface/lerobot/blob/main/docs/source/libero_plus.mdx)
 - SmolVLA paper: [arXiv:2506.01844](https://arxiv.org/abs/2506.01844); checkpoint: [lerobot/smolvla_libero](https://huggingface.co/lerobot/smolvla_libero)

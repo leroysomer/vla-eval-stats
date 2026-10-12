@@ -1,0 +1,4 @@
+policy_id,policy_variant,suite,n_episodes,n_success,mean_episode_len,mean_episode_s,fixed_s,s_per_step,overhead_s_per_episode,model_load_s,warmup_s,startup_s,peak_gpu_mem_mib,episodes_per_gpu_hour
+lerobot/pi05_libero_finetuned,default,libero_spatial,20,16,141.2,5.039,1.55,0.02471,0.1628,79.33,38.94,118.3,9046,692.1
+lerobot/pi05_libero_finetuned,nocompile,libero_spatial,20,18,127.3,4.776,1.49,0.02581,0.09668,76.32,0.9258,77.25,9084,738.7
+lerobot/smolvla_libero,default,libero_spatial,20,13,173.5,5.616,1.301,0.02487,0.1082,8.073,1.166,9.239,921.9,628.9

@@ -1,0 +1,11 @@
+# Step 2 timing run: 20 episodes per policy, spread over all 10 tasks so that the mix of
+# short (success) and long (timeout) episodes resembles the main grid.
+name: throughput
+policies: [smolvla, pi05]
+suites:
+  libero_spatial:
+    task_ids: all        # or a list, e.g. [0, 3]
+init_state_ids: 2        # an int n means 0..n-1; a list is taken as is
+seeds: [0]
+perturbation: none
+perturbation_level: 0

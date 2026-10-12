@@ -1,4 +1,4 @@
-# Source this before working in the repo or inside Slurm jobs:  source env.sh
+# Source this before working in the repo:  source env.sh
 # Keeps every cache on the local /Data disk (the home quota is 30 GB and nearly full).
 export DATA_ROOT=/Data/$USER
 export PATH="$DATA_ROOT/.local/bin:$PATH"

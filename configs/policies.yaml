@@ -1,0 +1,31 @@
+# Policies and their inference settings. One entry = one (policy_id, policy_variant) pair.
+#
+#   policy_id         Hugging Face Hub ID
+#   revision          Hub commit, pinned so a re-upload cannot silently change the results
+#   variant           label for the inference settings (the `policy_variant` column)
+#   policy_overrides  fields of the policy config changed at inference time, e.g. n_action_steps
+#   env               fields of LeRobot's LIBERO env config (lerobot.envs.configs.LiberoEnv)
+#
+# Changing anything in an entry changes its config_hash; the harness refuses to resume a
+# (policy_id, variant) whose stored rows carry another hash, so rename the variant instead.
+
+smolvla:
+  policy_id: lerobot/smolvla_libero
+  revision: 31d453f7edd78c839a8bbc39744a292686daf0de
+  variant: default
+  policy_overrides: {}
+  env:
+    # The checkpoint names its cameras camera1/camera2/camera3; LIBERO provides two.
+    camera_name_mapping:
+      agentview_image: camera1
+      robot0_eye_in_hand_image: camera2
+
+pi05:
+  policy_id: lerobot/pi05_libero_finetuned
+  revision: 7152f13e34c6c115d808aea0e5d08aca74eac14b
+  variant: nocompile
+  policy_overrides:
+    # The checkpoint config turns torch.compile on, which makes rollouts irreproducible for a
+    # fixed seed (Step 2, results/tables/reproducibility.csv). Off, it is as fast and exact.
+    compile_model: false
+  env: {}
