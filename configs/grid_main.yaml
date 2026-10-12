@@ -1,0 +1,9 @@
+# Main grid of docs/plan.md, Section 1: 10 tasks x 50 initial states x 4 seeds = 2,000 episodes
+# per policy, the same (task, initial state, seed) keys for every policy (paired design).
+name: main
+policies: [smolvla_n10, smolvla, pi05]   # A, A', B
+suites:
+  libero_spatial:
+    task_ids: all
+init_state_ids: 50
+seeds: [0, 1, 2, 3]

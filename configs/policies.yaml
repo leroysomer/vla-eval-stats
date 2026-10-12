@@ -9,6 +9,7 @@
 # Changing anything in an entry changes its config_hash; the harness refuses to resume a
 # (policy_id, variant) whose stored rows carry another hash, so rename the variant instead.
 
+# Policy A' of docs/plan.md: the SmolVLA checkpoint with its default of 50 actions per chunk.
 smolvla:
   policy_id: lerobot/smolvla_libero
   revision: 31d453f7edd78c839a8bbc39744a292686daf0de
@@ -20,12 +21,27 @@ smolvla:
       agentview_image: camera1
       robot0_eye_in_hand_image: camera2
 
+# Policy B of docs/plan.md: 10 actions per chunk, as in the published evaluation of this
+# checkpoint (configs/published.yaml).
 pi05:
   policy_id: lerobot/pi05_libero_finetuned
   revision: 7152f13e34c6c115d808aea0e5d08aca74eac14b
-  variant: nocompile
+  variant: n_action_steps_10_nocompile
   policy_overrides:
+    n_action_steps: 10
     # The checkpoint config turns torch.compile on, which makes rollouts irreproducible for a
     # fixed seed (Step 2, results/tables/reproducibility.csv). Off, it is as fast and exact.
     compile_model: false
   env: {}
+
+# Policy A of docs/plan.md: 10 actions per chunk, replanning five times as often as A'.
+smolvla_n10:
+  policy_id: lerobot/smolvla_libero
+  revision: 31d453f7edd78c839a8bbc39744a292686daf0de
+  variant: n_action_steps_10
+  policy_overrides:
+    n_action_steps: 10
+  env:
+    camera_name_mapping:
+      agentview_image: camera1
+      robot0_eye_in_hand_image: camera2

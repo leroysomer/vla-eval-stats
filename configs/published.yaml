@@ -1,0 +1,23 @@
+# Success rates reported by others on libero_spatial, with their protocol and source.
+# Keys are entries of configs/policies.yaml; a policy without an entry has no published
+# counterpart. Used by scripts/analyze_sanity.py. Checked on 2026-10-12.
+
+smolvla_n10:
+  suite: libero_spatial
+  success_rate: 0.90
+  episodes_per_task: 10
+  source: "SmolVLA paper, arXiv:2506.01844, Table 2, row SmolVLA (0.45B)"
+  protocol: >-
+    Not this checkpoint. The paper fine-tunes for 100,000 steps at batch size 64 and predicts a
+    new chunk after each executed action. lerobot/smolvla_libero was trained for 25,000 steps at
+    batch size 32 (its train_config.json); policy A executes 10 actions per chunk. Its
+    model card reports no success rate.
+
+pi05:
+  suite: libero_spatial
+  success_rate: 0.97
+  episodes_per_task: 10
+  source: "LeRobot docs, docs/source/libero.mdx at v0.6.1, 'Reproducing Pi0.5 results'"
+  protocol: >-
+    Same checkpoint and same n_action_steps=10 as policy B. Policy B differs only by
+    compile_model=false.

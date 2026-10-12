@@ -38,6 +38,8 @@ class Grid:
     seeds: list[int]
     perturbation: str = "none"
     perturbation_level: int = 0
+    # Directory under results/raw/ where the rows go; several grids may share one.
+    results_dir: str | None = None
 
     def keys(self, policy: PolicySpec) -> list[EpisodeKey]:
         """Planned episodes of one policy, ordered by shard (suite, task)."""
@@ -108,4 +110,5 @@ def load_grid(path: Path | str) -> Grid:
         seeds=_as_ids(raw["seeds"], "seeds"),
         perturbation=raw.get("perturbation", "none"),
         perturbation_level=int(raw.get("perturbation_level", 0)),
+        results_dir=raw.get("results_dir") or raw["name"],
     )

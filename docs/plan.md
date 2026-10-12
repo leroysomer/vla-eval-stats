@@ -1,6 +1,8 @@
 # Analysis plan
 
-Written on 2026-10-11 and extended with Part 3 on 2026-10-12, before the main grid is run. Anything decided after seeing results is
+Written on 2026-10-11, extended with Part 3 on 2026-10-12 and revised the same evening after
+the Step 3 sanity check (Section 1, "Planned comparisons"), before the main grid is run.
+Anything decided after seeing results is
 recorded in `docs/lab_notebook.md` with its date and labelled as post hoc.
 
 The report will be about five pages long and carries **three questions and one idea**: the
@@ -26,17 +28,34 @@ the leaderboard audit are out of scope (Section 9).
 
 | Name | Checkpoint | Inference setting |
 |---|---|---|
-| A | `lerobot/smolvla_libero` | default (`n_action_steps = 50`) |
-| A′ | same checkpoint | `n_action_steps = 10` (replans five times as often) |
-| B | `lerobot/pi05_libero_finetuned` | default, with `compile_model = false` |
+| A | `lerobot/smolvla_libero` | `n_action_steps = 10` |
+| A′ | same checkpoint | checkpoint default, `n_action_steps = 50` (replans five times less often) |
+| B | `lerobot/pi05_libero_finetuned` | `n_action_steps = 10`, with `compile_model = false` |
 
-The value 10 for A′ is fixed now and is not tuned on results. B runs without `torch.compile`
-because the compiled model is not reproducible for a fixed seed (lab notebook, 2026-10-08).
+A and B execute 10 actions per predicted chunk, the setting of the published π0.5 evaluation
+(LeRobot docs; sources in `configs/published.yaml`). A′ is the same checkpoint as A run with
+its default of 50. Both values are fixed now and are not tuned on results. B runs without
+`torch.compile` because the compiled model is not reproducible for a fixed seed (lab notebook,
+2026-10-08). The labels A and A′ were exchanged on 2026-10-12, before the main grid was run.
 
-**Planned comparisons:** A vs A′ (small gap expected, the kind of ablation papers report) and
-A vs B (large gap expected). There is no third comparison. Since there are only two, each
-answering its own question, no multiple-comparison correction is applied. Both comparisons are
-used in RQ2 and in RQ3.
+**Planned comparisons.** There are two, and no third one:
+
+- **A vs A′, within one model.** Same weights, one inference setting changed: the kind of
+  ablation papers report. The two policies see the same scenes with the same network, so their
+  outcomes are expected to be strongly correlated.
+- **A vs B, between two models.** Different architectures and training runs, same number of
+  executed actions per chunk.
+
+Since there are only two comparisons, each answering its own question, no multiple-comparison
+correction is applied. Both are used in RQ2 and in RQ3.
+
+*Revision of 2026-10-12.* The first version of this plan called A vs A′ a small-gap comparison
+and A vs B a large-gap one. The Step 3 sanity check (100 keys per policy, seed 0; lab notebook,
+2026-10-12) gave 79, 59 and 98 successes for A, A′ and B: neither gap is small. The two
+comparisons are therefore distinguished by what the policies share, not by the size of the
+gap. The policies, the grid, the tests and the comparisons themselves are unchanged. The study
+has no empirically small gap; small gaps are covered by the null control and by the
+"rollouts needed against gap" chart of Section 4, which is computed from the formula.
 
 **Randomness of one episode.** An episode is identified by its key $k = (t, i, s)$: task,
 initial state, seed. The harness derives all randomness (policy noise, simulator) from the key
@@ -220,13 +239,14 @@ design drawn from the grid:
 3. The expected number of rollouts per policy before stopping (500 when no decision is reached).
 4. The null control of Section 4, applied to both sequential tests.
 
-**Expected pattern, to be confirmed or refuted.** On A vs B both sequential tests should stop
-long before the budget. On A vs A′ the unpaired test may rarely decide within 500 rollouts; the
-question is whether pairing makes the comparison decidable.
+**Expected pattern, to be confirmed or refuted.** Both gaps look large (Section 1), so both
+sequential tests should usually decide within the budget on both comparisons. The question is
+how much earlier the paired test stops, and whether it gains more within one model (A vs A′)
+than between two models (A vs B).
 
-**Answer in one sentence:** "with a budget of 500 rollouts per policy, A vs B is decided after
-about N rollouts unpaired and M paired, and A vs A′ is decided in X% of evaluations unpaired
-and Y% paired."
+**Answer in one sentence:** "with a budget of 500 rollouts per policy, A vs A′ is decided
+after about N rollouts unpaired and M paired, and A vs B after about N′ and M′", with the
+share of evaluations that reach a decision if it is below 100%.
 
 **Figure 4:** probability of having rejected against $n$, one panel per comparison, one curve
 per sequential design, with the fixed-$n$ power at 500 marked. **Table 3:** power within budget
@@ -255,8 +275,7 @@ correlation between two policies):
 - The Step 3 sanity check (100 episodes of A) may be compared with published numbers to debug
   the setup. Its episodes are part of the grid and are not rerun.
 - If a setting has to change after the grid starts, all policies are rerun on all keys.
-- Results are reported whatever they are: a gap near zero for A vs A′ or a saving near zero
-  from pairing is a finding.
+- Results are reported whatever they are: a saving near zero from pairing is a finding.
 
 ## 8. Limits of the claims
 

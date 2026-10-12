@@ -49,8 +49,8 @@ Hands-on VLA models, a robot simulator, long unattended GPU evaluation runs on a
 |---|---|---|
 | Framework | [LeRobot](https://github.com/huggingface/lerobot) | Policies, LIBERO env wrapper, `lerobot-eval` CLI |
 | Benchmark | [LIBERO via LeRobot](https://huggingface.co/docs/lerobot/en/libero) | Suite used: `libero_spatial` |
-| Policy A, A′ | [`lerobot/smolvla_libero`](https://huggingface.co/lerobot/smolvla_libero) | 450M parameters, Apache-2.0. A′ is the same checkpoint with `n_action_steps = 10` instead of 50 |
-| Policy B | `lerobot/pi05_libero_finetuned` | Larger (about 3B), about 9 GB of GPU memory. Run with `compile_model=false` |
+| Policy A, A′ | [`lerobot/smolvla_libero`](https://huggingface.co/lerobot/smolvla_libero) | 450M parameters, Apache-2.0. A runs it with `n_action_steps = 10`, A′ with the checkpoint default of 50 |
+| Policy B | `lerobot/pi05_libero_finetuned` | Larger (about 3B), about 9 GB of GPU memory. Run with `n_action_steps = 10` (the published setting) and `compile_model=false` |
 | Stats | `scipy.stats.barnard_exact`, `statsmodels` (`proportion_confint`, `mcnemar`), [`sequentialized_barnard_tests`](https://github.com/TRI-ML/sequentialized_barnard_tests) (STEP) | Plus your own code for variance components, bootstrap, power and the sequential McNemar test. STEP is CC BY-NC 4.0: use it as a dependency, never copy its code into this repo |
 | Data | pandas + parquet | One row per episode |
 | Plots | matplotlib | Four figures: variance shares and intervals, power curves, rollouts versus gap, sequential stopping curves |
@@ -136,7 +136,7 @@ vla-eval-stats/
 - Environment (done): uv project with LeRobot pinned in `pyproject.toml` and exact versions in `uv.lock` (LeRobot, MuJoCo, robosuite, torch). `env.sh` sets `HF_HOME`, `UV_CACHE_DIR`, `LIBERO_CONFIG_PATH` and `MUJOCO_GL=egl`.
 - Pre-download the policy weights and LIBERO assets (done for both policies). π0.5 also needs the gated `google/paligemma-3b-pt-224` tokenizer: accept its licence on Hugging Face and run `uv run hf auth login`.
 - If EGL fails, try `MUJOCO_GL=osmesa` and record the slowdown.
-- Write `scripts/smoke_test.sh`: run `lerobot-eval` for Policy A on one task of one suite with 2 episodes and save the rollout video. `lerobot/smolvla_libero` names its cameras `camera1`/`camera2`/`camera3`, so the LIBERO env needs `--env.camera_name_mapping='{"agentview_image": "camera1", "robot0_eye_in_hand_image": "camera2"}'`.
+- Write `scripts/smoke_test.sh`: run `lerobot-eval` for the SmolVLA checkpoint on one task of one suite with 2 episodes and save the rollout video. `lerobot/smolvla_libero` names its cameras `camera1`/`camera2`/`camera3`, so the LIBERO env needs `--env.camera_name_mapping='{"agentview_image": "camera1", "robot0_eye_in_hand_image": "camera2"}'`.
 - Long runs must survive an SSH disconnect: start them inside `tmux` (`tmux new -s eval`, detach with `Ctrl-b d`, reattach with `tmux attach -t eval`) and write stdout/stderr to `logs/`.
 - Before every long run, check that the GPU is free with `nvidia-smi`: the machine sits in a shared computer room and someone else may be using it.
 
@@ -180,18 +180,18 @@ vla-eval-stats/
 **Goal:** the three policy entries and the grid of `docs/plan.md` exist as configs, and Policy A behaves as published.
 
 **Policies** (fixed in `docs/plan.md`, Section 1)
-- **A:** `lerobot/smolvla_libero`, default inference settings (`n_action_steps = 50`).
-- **A′:** the same checkpoint with `n_action_steps = 10`. A realistic **small-gap ablation**. The value is fixed in advance and is not tuned on results.
-- **B:** `lerobot/pi05_libero_finetuned` with `compile_model = false`.
+- **A:** `lerobot/smolvla_libero` with `n_action_steps = 10`.
+- **A′:** the same checkpoint with its default inference settings (`n_action_steps = 50`). A realistic **inference-setting ablation** of A. The values are fixed in advance and are not tuned on results.
+- **B:** `lerobot/pi05_libero_finetuned` with `n_action_steps = 10`, the setting of its published evaluation, and `compile_model = false`.
 
 **Grid**
 - `libero_spatial`, 10 tasks × 50 initial states × 4 seeds = **2,000 episodes per policy**, 6,000 in total.
 - **The same (task, initial state, seed) keys for every policy.** This is the paired design.
 
 **Tasks**
-- Add the A′ entry to `configs/policies.yaml` and write `configs/grid_main.yaml`.
-- Time 20 episodes of A′ (more inference calls per episode than A) and update the cost table.
-- **Sanity check:** run Policy A on 10 initial states per task (seed 0), 100 episodes, and compare with the success reported on the model card or in the SmolVLA paper. The Step 2 timing run gave 13/20, well below published numbers. If the gap remains, debug the setup (the third camera the checkpoint expects, the 280-step limit, control mode, image preprocessing) before going further. These 100 episodes are part of the grid and are not rerun.
+- Add the A entry (`n_action_steps = 10`) to `configs/policies.yaml` and write `configs/grid_main.yaml`.
+- Time 20 episodes of A and of B (more inference calls per episode than with 50 actions per chunk) and update the cost table.
+- **Sanity check:** run Policy A and Policy B on 10 initial states per task (seed 0), 100 episodes each, and compare with the published success rates (`configs/published.yaml`). The Step 2 timing run gave 13/20 for A′, well below published numbers. If the gap remains, debug the setup (the third camera the checkpoint expects, the 280-step limit, control mode, image preprocessing) before going further. These 100 episodes are part of the grid and are not rerun.
 
 **Deliverables:** `configs/policies.yaml`, `configs/grid_main.yaml`, the sanity-check result and the updated cost table in the notebook.
 **Done when:** the sanity check is close to the published numbers (or the difference is understood and documented) and the projected cost of the grid is confirmed with me.
@@ -309,7 +309,7 @@ vla-eval-stats/
 **Table 3:** power within budget and expected rollouts for the four designs (unpaired or paired × fixed or sequential).
 
 **Deliverables:** `results/tables/rq3_*.csv`, `figures/rq3.png`, notebook entry.
-**Done when:** you can state, with numbers from the data: "With a budget of 500 rollouts per policy, A vs B is decided after about N rollouts unpaired and M paired, and A vs A′ is decided in X% of evaluations unpaired and Y% paired."
+**Done when:** you can state, with numbers from the data: "With a budget of 500 rollouts per policy, A vs A′ is decided after about N rollouts unpaired and M paired, and A vs B after about N′ and M′."
 
 **Fallback:** if STEP cannot be installed or run at n_max = 500, report the sequential McNemar test against the two fixed-n tests only, and say that the unpaired sequential cell is missing.
 
@@ -344,8 +344,8 @@ vla-eval-stats/
 
 | Level | Steps | What you can claim |
 |---|---|---|
-| **Minimum viable** | 0 to 7 with policies A and A′ | Variance decomposition, paired vs unpaired power on a small gap |
-| **Target** | + Policy B | The same result on a large gap |
+| **Minimum viable** | 0 to 7 with policies A and A′ | Variance decomposition, paired vs unpaired power within one model |
+| **Target** | + Policy B | The same result between two models |
 | **Full** | + Step 8 | Sequential testing, unpaired and paired, with a test of your own |
 | **Later, as separate work** | perturbations; leaderboard audit | See "Out of scope" in `docs/plan.md` |
 
@@ -353,9 +353,9 @@ vla-eval-stats/
 
 ## 6. Compute and time estimates
 
-Measured in Step 2 (`results/tables/throughput.csv`): about 630 episodes per GPU-hour for SmolVLA and 740 for π0.5 on `libero_spatial`.
+Measured in Steps 2 and 3 (`results/tables/throughput.csv`) on `libero_spatial`: about 440 episodes per GPU-hour for A, 630 for A′ and 500 for B.
 
-- Main grid: 2,000 episodes per policy is about 3 to 5 GPU-hours for A and for B. A′ is slower (more inference calls per episode) and is timed in Step 3.
+- Main grid, 2,000 episodes per policy (`results/tables/cost_projection.csv`): about 4.6 GPU-hours for A, 3.2 for A′ and 4.0 for B at the episode lengths observed in the timing runs, 12 in all; 21 if every episode ran to the step limit.
 - All compute is one RTX A5000 on verdier, so GPU-hours equal wall-clock hours and the policies run one after the other.
 - The statistics (Steps 5 to 8) need no GPU once the parquet files exist. The one unknown is the time to synthesize the STEP policy for n_max = 500.
 
@@ -367,7 +367,7 @@ Measured in Step 2 (`results/tables/throughput.csv`): about 630 episodes per GPU
 |---|---|
 | Published success not reproduced | Debug the third camera, step limit, control mode and image preprocessing; if it remains, document the gap and continue (the statistics still hold for what you measured) |
 | A policy is near 100% (little variance to study) | Report it as is; consider `libero_10` as separate, later work |
-| The A vs A′ gap is near zero | Report it: the power analysis and the "rollouts versus gap" chart do not depend on the observed gap being large |
+| Neither observed gap is small (Step 3 sanity check) | Small gaps are covered by the null control and by the formula-based "rollouts versus gap" chart, which does not depend on the observed gaps |
 | STEP cannot be installed, or fails at n_max = 500 | Report the sequential McNemar test against the fixed-n tests only (Step 8 fallback) |
 | SSH session drops during a long run | Always launch inside `tmux`; logs in `logs/` |
 | Machine rebooted, or GPU taken by another user, mid-run | Resumable harness: rerun the same command; check `nvidia-smi` before launching |

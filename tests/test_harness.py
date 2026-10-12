@@ -104,3 +104,21 @@ def test_repo_configs_expand():
         assert len(keys) == 20
         assert len({k.as_tuple() for k in keys}) == 20
         assert {k.task_id for k in keys} == set(range(10))
+
+
+def test_main_grid_is_paired_and_holds_the_sanity_check():
+    specs = load_policies(REPO_ROOT / "configs/policies.yaml")
+    main = load_grid(REPO_ROOT / "configs/grid_main.yaml")
+    sanity = load_grid(REPO_ROOT / "configs/grid_sanity.yaml")
+
+    # Every policy runs the same 2,000 (suite, task, initial state, seed) scenarios.
+    scenarios = [{k.as_tuple()[2:] for k in main.keys(specs[name])} for name in main.policies]
+    assert len(main.policies) == 3
+    assert all(len(s) == 2000 and s == scenarios[0] for s in scenarios)
+
+    # The sanity check is stored with the main grid and is part of it.
+    assert sanity.results_dir == main.results_dir == "main"
+    for name in sanity.policies:
+        keys = {k.as_tuple() for k in sanity.keys(specs[name])}
+        assert len(keys) == 100
+        assert keys <= {k.as_tuple() for k in main.keys(specs[name])}

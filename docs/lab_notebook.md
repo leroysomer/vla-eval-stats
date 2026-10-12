@@ -1,5 +1,10 @@
 # Lab notebook
 
+**Notation.** A is SmolVLA with `n_action_steps = 10`, A′ is SmolVLA with the checkpoint
+default of 50, B is π0.5 with `n_action_steps = 10` and `compile_model = false`. A and A′ were
+exchanged on 2026-10-12 and earlier entries were relabelled. Until that date π0.5 was run
+with its default of 50 actions per chunk; those entries say so.
+
 Every number below comes from a file in `results/tables/`, named next to it.
 
 ## 2026-10-08 — Step 2: per-episode harness and cost estimate
@@ -84,13 +89,13 @@ Revised on 2026-10-11 to the grid of `docs/plan.md` (see the entry of that date)
 policy on the A5000. "Observed" assumes episodes as long as in the timing run; "worst case"
 assumes every episode runs to the step limit.
 
-| Run | Episodes per policy | SmolVLA (A) observed / worst | π0.5 (B) observed / worst |
+| Run | Episodes per policy | SmolVLA, 50 actions per chunk (A′) observed / worst | π0.5, 50 actions per chunk observed / worst |
 |---|---|---|---|
 | Step 3 sanity check (10 tasks × 10 initial states) | 100 | 0.16 / 0.24 | — |
 | Main grid (10 tasks × 50 initial states × 4 seeds) | 2,000 | 3.2 / 4.7 | 2.7 / 4.9 |
 
-Not covered by these timings: policy A′ (`n_action_steps = 10` means five times as many
-inference calls per episode, so it will be slower than A). It is timed in Step 3.
+Not covered by these timings: policy A (`n_action_steps = 10` means five times as many
+inference calls per episode, so it will be slower than A′). It is timed in Step 3.
 
 ### What surprised us
 
@@ -128,8 +133,8 @@ inference calls per episode, so it will be slower than A). It is timed in Step 3
 - The harness keeps the `perturbation` and `perturbation_level` columns, always `none` and 0.
 - Still open from Step 1: how the third camera that `lerobot/smolvla_libero` expects was
   handled in training. It goes to the Step 3 sanity check.
-- Reproducibility for a fixed key was checked on 20 episodes for A and for B. It has not been
-  checked for A′, and the plan relies on it to re-run discordant episodes with video.
+- Reproducibility for a fixed key was checked on 20 episodes for A′ and for π0.5. It has not been
+  checked for A, and the plan relies on it to re-run discordant episodes with video.
 
 ## 2026-10-12 — Sequential testing back in scope (RQ3); Steps 1 and 2 re-checked
 
@@ -140,6 +145,112 @@ of 500 rollouts per policy). This replaces the "no sequential testing" of the pr
   needs no extra rollouts, no new column and no change to the cost table.
 - Re-checked without the GPU: the lock file is up to date, the unit tests pass, the four
   tables in `results/tables/` are rebuilt byte for byte from `results/raw/`, both raw
-  directories hold 60 rows with no duplicated key, and the stored `config_hash` of A and B
+  directories hold 60 rows with no duplicated key, and the stored `config_hash` of A′ and π0.5
   match the current `configs/policies.yaml`.
 - New rule (`CLAUDE.md`): nothing runs on the GPU between 08:00 and 18:00 Paris time.
+
+## 2026-10-12 — Step 3 prepared (no GPU run yet)
+
+Written during the day, when the GPU is off limits. The rollouts are in `scripts/step3.sh`.
+
+### Configs
+
+- `configs/policies.yaml`: A added as `smolvla_n10`, variant `n_action_steps_10`. The field
+  name was checked against the installed SmolVLA config (chunk size stays 50).
+- `configs/grid_main.yaml`: 10 tasks × 50 initial states × seeds 0 to 3 for the three policies. A unit
+  test checks that the three policies get the same 2,000 scenarios.
+- `configs/grid_sanity.yaml`: A′ on initial states 0 to 9, seed 0. It writes to
+  `results/raw/main/`, so the main grid will skip these 100 episodes.
+- `configs/grid_throughput.yaml` and `configs/cost_scenarios.yaml` now include A.
+
+### The third camera (open since Step 1): not a problem
+
+From the checkpoint's own `train_config.json` and `policy_preprocessor.json`:
+
+- It was trained on `lerobot/libero`, which has two cameras, with the rename
+  `image → camera1`, `image2 → camera2`. The harness applies the same mapping.
+- `camera3`, and the state of size 6 in `config.json`, are inherited from `smolvla_base`. The
+  stored normalization statistics have a state of size 8, which is what LeRobot's LIBERO
+  processor produces. With `empty_cameras = 0` the missing third camera is skipped, as it was
+  in training.
+- Training used relative control, LeRobot's default, and 360 × 360 env images, also the default.
+
+### What "published" means for these checkpoints (`configs/published.yaml`)
+
+- **SmolVLA.** The model card of `lerobot/smolvla_libero` reports no success rate. The SmolVLA paper
+  reports 90% on `libero_spatial` for the 0.45B model, with 10 trials per task, but for another
+  training run (100,000 steps at batch size 64; this checkpoint: 25,000 steps at batch size 32)
+  and with a new chunk predicted after every executed action, where the checkpoint default executes 50.
+- **π0.5.** The LeRobot docs report 97.0% on `libero_spatial` for this checkpoint, with
+  `--policy.n_action_steps=10`. The checkpoint default is 50.
+
+So the published numbers were all obtained with frequent replanning, while both checkpoints
+execute whole 50-action chunks by default. This is why A and A′ were exchanged and B was moved
+to 10 actions per chunk (next entry).
+
+## 2026-10-12 (evening) — Step 3: notation exchanged, B at 10 actions per chunk, sanity check
+
+### Decisions (Nicholas)
+
+- **A and A′ exchanged.** A is now SmolVLA with `n_action_steps = 10`, A′ the checkpoint
+  default of 50. Entry names and variant names in `configs/policies.yaml` are unchanged
+  (`smolvla_n10` is A, `smolvla` is A′), so the stored rows keep their keys.
+- **B uses the published setting**, `n_action_steps = 10`, and keeps `compile_model = false`.
+  Its variant is `n_action_steps_10_nocompile`. The 20 timing episodes of π0.5 at 50 actions
+  per chunk stay in `results/raw/throughput/` but are no longer a policy of the study.
+- The success counts of the timing runs may be looked at.
+
+### Runs (`scripts/step3.sh`, two passes: 18:56 and 19:42)
+
+- Timing grid, 20 episodes each, for A and for B, each run twice.
+- Sanity grid, 100 episodes each (10 tasks × initial states 0 to 9 × seed 0), for A, A′ and B,
+  stored in `results/raw/main/`. No episode crashed.
+
+### Sanity check (`results/tables/sanity_check.csv`)
+
+| Policy | Successes | Rate, 95% Clopper-Pearson | Published | Same checkpoint and protocol? |
+|---|---|---|---|---|
+| B (π0.5, 10 actions) | 98 / 100 | 98% [93, 100] | 97.0% | yes, except `compile_model` |
+| A (SmolVLA, 10 actions) | 79 / 100 | 79% [70, 87] | 90% | no: paper's own training run, replanning every action |
+| A′ (SmolVLA, 50 actions) | 59 / 100 | 59% [49, 69] | none | — |
+
+- **B reproduces its published number.** Same harness, same env settings, same initial states:
+  this is the evidence that the setup (control mode, images, step limit, initial states) is
+  right.
+- **A is below the paper's 90%**, and the paper's number is not about this checkpoint
+  (25,000 training steps against 100,000; sources in `configs/published.yaml`). With B
+  validating the setup, the gap is attributed to the checkpoint, not to the evaluation.
+- **Task 5 fails every time for SmolVLA**: 0/10 for A and 0/10 for A′, against 9/10 for B. The
+  other nine tasks give A 79/90. Worth a video in Step 7.
+
+### Reproducibility (`results/tables/reproducibility.csv`)
+
+A and B, rerun on the 20 timing keys: 20/20 identical for each. All three policies of the study
+are now checked, which the plan needs to re-run discordant episodes with video.
+
+### Throughput and cost (`results/tables/throughput.csv`, `results/tables/cost_projection.csv`)
+
+| | A | A′ | B |
+|---|---|---|---|
+| Episodes per GPU-hour | 438 | 629 | 498 |
+| Seconds per step | 0.042 | 0.025 | 0.050 |
+| Main grid, 2,000 episodes: GPU-hours observed / worst case | 4.6 / 7.2 | 3.2 / 4.7 | 4.0 / 8.7 |
+
+Executing 10 actions per chunk instead of 50 costs about 0.017 s more per step for SmolVLA and
+0.025 s for π0.5. The whole grid is about 12 GPU-hours at the observed episode lengths and 21
+if every episode ran to the step limit. 300 of the 6,000 episodes are already stored.
+
+### What surprised us
+
+1. The number of executed actions per chunk matters a lot for SmolVLA: 79 against 59 successes
+   on the same 100 keys. The plan calls A vs A′ a small-gap comparison; on this evidence it is
+   not small.
+2. π0.5 gains less from it on the 20 timing keys (19 against 18).
+
+### Plan reworded after the sanity check (post hoc, 2026-10-12)
+
+`docs/plan.md` no longer calls A vs A′ a small-gap comparison and A vs B a large-gap one, since
+the sanity check shows two large gaps. The comparisons are now described as within one model
+(A vs A′) and between two models (A vs B). Policies, grid, tests and comparisons are unchanged.
+The expected pattern of RQ3 and its one-sentence answer were rewritten accordingly. This was
+decided after seeing 100 episodes per policy, and the plan says so.

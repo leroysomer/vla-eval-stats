@@ -1,0 +1,12 @@
+# Step 3 sanity check: policies A, A' and B on 10 initial states per task, seed 0 (100 episodes
+# each). A' has no published counterpart; it was run before A and A' were exchanged.
+# These keys are a subset of configs/grid_main.yaml and are stored with it, so the main grid
+# does not run them again.
+name: sanity
+results_dir: main
+policies: [smolvla_n10, smolvla, pi05]
+suites:
+  libero_spatial:
+    task_ids: all
+init_state_ids: 10
+seeds: [0]
