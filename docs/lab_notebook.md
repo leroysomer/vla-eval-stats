@@ -254,3 +254,24 @@ the sanity check shows two large gaps. The comparisons are now described as with
 (A vs A′) and between two models (A vs B). Policies, grid, tests and comparisons are unchanged.
 The expected pattern of RQ3 and its one-sentence answer were rewritten accordingly. This was
 decided after seeing 100 episodes per policy, and the plan says so.
+
+## 2026-10-12 (night) — Repo moved to the shared home, three more machines prepared
+
+Goal: run each policy on its own machine. Only the home directory is shared between lab
+machines; `/Data` is local to each.
+
+- **Layout.** The repo and the results now live in `~/vla-eval-stats` (4 MB). The environment,
+  weights and assets (17 GB) stay on local `/Data/$USER`, with the environment in
+  `/Data/$USER/venvs/vla-eval-stats`. `.venv` in the repo and `/Data/$USER/vla-eval-stats` are
+  links, so no path stored in the environment or in the LIBERO config had to change.
+- **`scripts/setup_machine.sh <host>`** copies the local part to a machine and checks it
+  without the GPU (unit tests, dry run of the main grid). Done for bengali, nandou and quetzal:
+  idle RTX A5000 machines with the same driver and OS release as verdier.
+- **Several machines writing to one results directory.** Three changes in the harness:
+  temporary files carry the host and process id and only stale ones are cleaned up; a lock file
+  per policy variant stops two processes from running the same policy, and the stored rows are
+  re-read once the lock is held; the run and crash logs are one file per machine
+  (`runs.<host>.jsonl`, `failures.<host>.jsonl`).
+- Not checked: whether another machine reproduces verdier's episodes exactly. The GPU model
+  and driver are the same, but no rollout has been run elsewhere yet.
+- The previous copy of the repo is kept as `/Data/$USER/vla-eval-stats.old` on verdier.

@@ -123,8 +123,13 @@ def main() -> None:
     args = parser.parse_args()
 
     episodes = load_episodes(args.raw_dir)
-    with open(args.raw_dir / "runs.jsonl") as f:
-        runs = pd.DataFrame([json.loads(line) for line in f])
+    # One run log per machine (runs.<host>.jsonl), plus runs.jsonl from before that change.
+    lines = [
+        line
+        for path in sorted(args.raw_dir.glob("runs*.jsonl"))
+        for line in path.read_text().splitlines()
+    ]
+    runs = pd.DataFrame([json.loads(line) for line in lines])
     runs = runs[runs["n_run"] > 0]
     with open(args.scenarios) as f:
         scenarios = yaml.safe_load(f)

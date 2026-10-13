@@ -32,7 +32,7 @@ from lerobot.utils.random_utils import set_seed
 
 from .grid import PolicySpec
 from .schema import EpisodeKey, config_hash
-from .store import EpisodeStore, append_jsonl
+from .store import HOST, EpisodeStore, RunLock, append_jsonl
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +42,9 @@ lerobot_eval.inside_slurm = lambda: True
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 # A crash is missing data, not a task failure: it goes to this file, never to the parquet rows.
-FAILURES_FILE = "failures.jsonl"
-RUNS_FILE = "runs.jsonl"
+# One file per machine: appending to one file from several machines over NFS can lose lines.
+FAILURES_FILE = f"failures.{HOST}.jsonl"
+RUNS_FILE = f"runs.{HOST}.jsonl"
 MAX_CONSECUTIVE_CRASHES = 3
 
 
@@ -193,6 +194,13 @@ class PolicyRunner:
                 raise NotImplementedError(
                     "perturbations are out of scope (docs/plan.md, Section 9)"
                 )
+        # One process at a time per policy variant, and a fresh view of what is stored: another
+        # machine may have written rows since `store` was read.
+        with RunLock(store.out_dir, self.spec.policy_id, self.spec.variant) as lock:
+            store.reload()
+            return self._run_locked(keys, store, lock)
+
+    def _run_locked(self, keys: list[EpisodeKey], store: EpisodeStore, lock: RunLock) -> dict:
         stored = store.config_hashes(self.spec.policy_id, self.spec.variant)
         if stored - {self.config_hash}:
             raise ValueError(
@@ -258,6 +266,7 @@ class PolicyRunner:
                             continue
                         consecutive_crashes = 0
                         store.add(key, row)
+                        lock.beat()
                         summary["n_run"] += 1
                         logger.info(
                             "[%d/%d] %s task %d init %d seed %d: success=%d len=%d %.1fs",

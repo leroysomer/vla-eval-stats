@@ -1,12 +1,21 @@
 """Storage and grid logic of the harness (no simulator, no GPU)."""
 
+import json
+import os
+import time
 from pathlib import Path
 
 import pytest
 
 from evalstats.harness.grid import load_grid, load_policies
 from evalstats.harness.schema import COLUMNS, KEY_COLUMNS, EpisodeKey
-from evalstats.harness.store import EpisodeStore, load_episodes
+from evalstats.harness.store import (
+    HOST,
+    STALE_AFTER_S,
+    EpisodeStore,
+    RunLock,
+    load_episodes,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -69,9 +78,44 @@ def test_store_ignores_interrupted_write(tmp_path):
     store = EpisodeStore(tmp_path)
     key = make_key()
     store.add(key, make_row(key))
-    (tmp_path / f"{key.shard}.parquet.tmp").write_bytes(b"half-written")
+    old = tmp_path / f"{key.shard}.parquet.otherhost.1.tmp"
+    recent = tmp_path / f"{key.shard}.parquet.otherhost.2.tmp"
+    for leftover in (old, recent):
+        leftover.write_bytes(b"half-written")
+    os.utime(old, (time.time() - 2 * STALE_AFTER_S,) * 2)
+
+    # Old leftovers are removed; a recent one may belong to a live process on another machine.
     assert len(EpisodeStore(tmp_path)) == 1
-    assert not list(tmp_path.glob("*.tmp"))
+    assert [p.name for p in tmp_path.glob("*.tmp")] == [recent.name]
+
+
+def test_store_reload_sees_rows_of_other_processes(tmp_path):
+    mine, other = EpisodeStore(tmp_path), EpisodeStore(tmp_path)
+    key = make_key()
+    other.add(key, make_row(key))
+    assert key not in mine
+    mine.reload()
+    assert key in mine
+
+
+def test_run_lock_is_exclusive_and_recovers(tmp_path):
+    lock = RunLock(tmp_path, "org/policy", "default")
+    with lock:
+        with pytest.raises(RuntimeError, match="held by another run"):
+            RunLock(tmp_path, "org/policy", "default").acquire()
+        RunLock(tmp_path, "org/policy", "other").acquire()  # another variant is free
+    assert not lock.path.exists()
+
+    # A lock left by a dead process of this machine is taken over at once.
+    lock.path.write_text(json.dumps({"host": HOST, "pid": 2**22 + 12345, "started": 0}))
+    RunLock(tmp_path, "org/policy", "default").acquire()
+
+    # A lock of another machine is taken over only once it has stopped being refreshed.
+    lock.path.write_text(json.dumps({"host": "elsewhere", "pid": 1, "started": 0}))
+    with pytest.raises(RuntimeError, match="held by another run"):
+        RunLock(tmp_path, "org/policy", "default").acquire()
+    os.utime(lock.path, (time.time() - 2 * STALE_AFTER_S,) * 2)
+    RunLock(tmp_path, "org/policy", "default").acquire()
 
 
 def test_store_config_hashes(tmp_path):

@@ -130,7 +130,7 @@ vla-eval-stats/
 **The machine**
 - `verdier.polytechnique.fr`, a single workstation reached over SSH: 1× RTX A5000 (24 GB), 16 CPU cores, 62 GB RAM. It has internet, so weights and assets download directly.
 - There is no scheduler. Everything runs as an ordinary process on the one GPU, so runs are sequential and the budget is **wall-clock hours on one GPU**.
-- Storage: the home directory is on NFS with a 30 GB quota that is nearly full. The repo, the virtual environment, the uv and Hugging Face caches and the LIBERO assets all live on the local disk under `/Data/$USER`. **`/Data` is local to verdier and may not be backed up**: commit code and small result tables to git, and copy `results/raw/` somewhere safe after each long run.
+- Storage: the home directory is on NFS, shared by every lab machine, with a 30 GB quota that is nearly full. The repo and the results (a few MB) live there, in `~/vla-eval-stats`. The virtual environment, the uv and Hugging Face caches and the LIBERO assets (about 17 GB) live on each machine's local disk under `/Data/$USER`, where `/Data/$USER/vla-eval-stats` is a link to the repo. `scripts/setup_machine.sh <host>` copies the local part to another machine, so that each policy can run on its own machine and write to the same `results/raw/`.
 
 **Tasks**
 - Environment (done): uv project with LeRobot pinned in `pyproject.toml` and exact versions in `uv.lock` (LeRobot, MuJoCo, robosuite, torch). `env.sh` sets `HF_HOME`, `UV_CACHE_DIR`, `LIBERO_CONFIG_PATH` and `MUJOCO_GL=egl`.

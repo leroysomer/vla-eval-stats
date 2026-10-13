@@ -1,5 +1,7 @@
 # Source this before working in the repo:  source env.sh
-# Keeps every cache on the local /Data disk (the home quota is 30 GB and nearly full).
+# The repo and the results are in the home directory, shared by every lab machine. Everything
+# heavy (environment, weights, caches) stays on the local /Data disk of each machine: the home
+# quota is 30 GB and nearly full. scripts/setup_machine.sh prepares /Data on a new machine.
 export DATA_ROOT=/Data/$USER
 export PATH="$DATA_ROOT/.local/bin:$PATH"
 export XDG_CACHE_HOME=$DATA_ROOT/.cache
