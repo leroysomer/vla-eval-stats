@@ -275,3 +275,136 @@ machines; `/Data` is local to each.
 - Not checked: whether another machine reproduces verdier's episodes exactly. The GPU model
   and driver are the same, but no rollout has been run elsewhere yet.
 - The previous copy of the repo is kept as `/Data/$USER/vla-eval-stats.old` on verdier.
+
+## 2026-10-13 — Step 4: main grid run on three machines, complete
+
+### Runs
+
+Launched on 2026-10-12 at 23:42, one policy per machine, each in `tmux` with
+`scripts/run_grid.sh --grid configs/grid_main.yaml --policies <name>`. All three wrote to the
+shared `results/raw/main/`. The 100 sanity episodes per policy run on verdier in Step 3 were
+skipped, as planned. Figures below are from `results/raw/main/runs.<host>.jsonl`.
+
+| | A (`smolvla_n10`) | A′ (`smolvla`) | B (`pi05`) |
+|---|---|---|---|
+| Machine | bengali | nandou | quetzal |
+| Finished | 04:30 | 03:20 | 03:14 |
+| Episodes run / already stored / crashed | 1,900 / 100 / 0 | 1,900 / 100 / 0 | 1,900 / 100 / 0 |
+| Wall-clock hours for the 1,900 | 4.8 | 3.6 | 3.5 |
+| Episodes per hour | 395 | 523 | 541 |
+| Peak GPU memory (MiB) | 922 | 922 | 9,084 |
+
+Each log in `logs/` ends with `exit code: 0` and holds no traceback. No `failures.<host>.jsonl`
+was written, and no lock or temporary file is left in `results/raw/main/`. One pass was enough.
+
+### Completeness (`scripts/check_completeness.py`, `results/tables/main_completeness.csv`)
+
+**6,000 of 6,000 planned episodes are stored, each exactly once**: for every policy, 2,000
+planned, 2,000 stored, 0 missing, 0 duplicated, 0 unplanned, 0 crash records, and the same for
+each of the 30 shards (200 rows each). There is no `main_missing.csv` because no key is missing.
+The script exits with status 1 and lists the missing keys with a reason when a grid is
+incomplete (checked on a copy with one shard removed).
+
+### What surprised us
+
+1. A ran at 395 episodes per hour on bengali against 438 in the Step 3 timing run on verdier,
+   and A′ at 523 against 629, while B was faster than projected (541 against 498). Cost only.
+2. Nothing crashed in 5,700 episodes on three machines sharing one results directory over NFS.
+
+### Open
+
+- **Provenance.** The rows carry `repo_commit` `c95a938-dirty`: the grid ran with the
+  multi-machine harness changes of 2026-10-12 (night) uncommitted. They were committed
+  unchanged on 2026-10-13 as `1ef016b`, which is the code that produced the grid.
+- **Cross-machine reproducibility is still unchecked.** No key was run on two machines. An
+  exact check is to rerun a few of verdier's sanity keys on bengali, nandou or quetzal and
+  compare success and episode length (GPU, after 18:00).
+- `results/raw/` now sits on the shared home, not on `/Data`, so the pitfall of Step 4 about
+  copying it off `/Data` no longer applies. It is gitignored and this is its only copy.
+- No success rate of the full grid has been analysed yet (Steps 6 and 7).
+
+## 2026-10-13/14 — Step 5: statistics toolkit, validated on simulated data
+
+No real-data analysis was run. Every method was checked on simulated data with known truth only
+(docs/plan.md, Section 6).
+
+### What was built (`src/evalstats/stats/`)
+
+| Module | Contents |
+|---|---|
+| `variance.py` | `episodes_to_array` (rows → task × state × seed array); `components` (unbiased moment estimators of the task, state and seed components of a variance, or of the covariance between two policies); `rate_variance`, `design_effect` |
+| `intervals.py` | Clopper-Pearson; bootstrap that resamples states within each task and keeps the seeds of a state together, the same draw for both policies (`bootstrap_rate`, `bootstrap_gap`, `bootstrap_replicates` for any statistic) |
+| `exact.py` | McNemar's exact p-value, vectorized; Barnard's rejection region, computed once per n |
+| `power.py` | resampled power for both designs, the sample-size formula and its power, `n_at_power` |
+| `sequential.py` | the sequential McNemar test of plan Section 5, `rejection_curve` |
+| `step.py` | wrapper around the STEP package, both directions at α/2 |
+| `simulate.py` | nested Bernoulli model of two policies with chosen components and correlation per level |
+
+- **Barnard.** scipy's `barnard_exact` is far too slow to call on every table of a power loop
+  (n up to 5,000). `barnard_region(n)` computes the rejection region directly: tables are
+  ordered by the pooled Wald statistic and the critical value is the smallest whose rejection
+  probability stays within α over a fine grid of common rates, refined around the peaks. It
+  matches scipy on every table for n = 5, 6, 10, 15, 20 and 30, and on the edge of the region
+  at n = 60. It takes about 6 s at n = 5,000.
+- **STEP** (`sequentialized_barnard_tests` 0.0.9, added to `pyproject.toml`) is run as the
+  package's `MirroredStepTest` with `inference_mode="ranking"`: two one-sided tests at α/2.
+  The policy for a budget of 500 at α/2 = 0.025 is not shipped; synthesizing it took 226 s of
+  CPU. The package caches it among its own files in the venv, so each machine synthesizes it
+  once. Two quirks of the package: its constructor drops the policy it has just loaded (the
+  wrapper reloads it), and every reset re-seeds its randomization with the same seed (the
+  wrapper gives each evaluation its own seed).
+- **Sequential McNemar test, clarification of the plan (2026-10-13, after the grid).** Plan
+  Section 5 lets the test look only when a discordant pair arrives. With that rule alone,
+  "all the risk at the last step" would reproduce McNemar's exact test only when the last pair
+  happens to be discordant, which contradicts item 4 of the same section. The test therefore
+  also looks once at the last step of the budget, where it may use all the risk left. Validity
+  is unchanged: the total risk is still at most α. This was decided while writing the code,
+  after the grid was run but before any comparison was computed.
+
+### Validation (`scripts/validate_stats.py`, about 7 minutes of CPU, seeded)
+
+The scenarios use the main grid's layout (10 tasks × 50 states × 4 seeds): four regimes of one
+policy run twice on other seeds (balanced, state-heavy, task-heavy, success rate 95%) and two
+pairs of policies 10 and 4 points apart. Rerunning the script gives the same tables.
+
+- **Recovery** (`stats_recovery.csv`): 30 components and covariances over 2,000 grids each.
+  Every mean estimate is within 1.7 Monte Carlo standard errors of the truth.
+- **Coverage** (`coverage.csv`, 2,000 grids, 2,000 bootstrap replicates):
+  - The bootstrap interval covers the rate 94.4% to 95.5% of the time in all six scenarios,
+    and the gap 95.0% and 94.8%.
+  - Clopper-Pearson goes wrong in the direction of the design effect. It covers 79.0% at a
+    design effect of 2.6, 83% to 88% at 1.7 to 2.0, and 98.2% at 0.70.
+  - The bootstrap intervals of the components (500 grids) cover 90% to 96%. The state
+    component is the weakest: 89.8% at a 95% success rate and 92.0% in the state-heavy
+    regime. Worth saying in Step 6.
+- **Type-I error** (`type1.csv`, 20,000 evaluations each; all 38 rates have a 95% interval
+  that reaches 5% or below):
+  - Barnard: 4.2% to 5.0% at n = 50, 200 and 1,000. The exact worst-case size of the region is
+    4.84% to 5.00% for n from 50 to 5,000.
+  - McNemar: 0.4% to 4.6%. It is conservative at small n, most of all at a 95% success rate,
+    where few pairs are discordant.
+  - Sequential McNemar, budget 500: 3.2% at 2% discordance, 4.5% to 5.0% from 5% to 50%, and
+    4.7% to 5.1% on the four one-policy scenarios.
+  - STEP, budget 500: 4.8% to 5.3%. The highest, 5.30% [4.99, 5.61] at both rates 0.2, is
+    compatible with 5% but is the closest call of the table. STEP's guarantee rests on a grid
+    of 129 worst-case rates.
+- **Power against the formula** (`power_check.csv`, 5,000 evaluations per point):
+  - Unpaired: Barnard is within 2.5 points of the formula everywhere and within 1.1 points at
+    the formula's n for 80%.
+  - Paired: exact McNemar is up to 9 points below the formula at small n, 2.6 to 3.9 points
+    below at the formula's n for 80% (76.1% and 77.4%), and converges above that.
+
+### What surprised us
+
+1. The normal formula overstates the power of exact McNemar by a few points near 80%, so the
+   formula's paired n will be a little optimistic in Step 7. The power curves are the
+   reference; the formula is the explanation.
+2. The paired fixed-n test is the more conservative of the two at small n (discreteness of the
+   discordant count), which works against pairing exactly where few pairs are discordant.
+
+### Housekeeping
+
+- `tests/test_stats.py`: 24 tests, about 20 s, including exhaustive checks against scipy and
+  statsmodels and a brute-force check that the sequential boundary is exact and cannot be
+  lowered. The whole suite is 33 tests.
+- The other machines need `uv sync` before running the stats code (new dependency).
