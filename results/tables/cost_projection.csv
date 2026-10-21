@@ -1,7 +1,0 @@
-scenario,description,policy,suite,n_episodes,gpu_hours_observed_mix,gpu_hours_worst_case
-sanity_check,Step 3 sanity check: 10 tasks x 10 initial states x 1 seed,smolvla_n10,libero_spatial,100,0.231,0.363
-sanity_check,Step 3 sanity check: 10 tasks x 10 initial states x 1 seed,smolvla,libero_spatial,100,0.162,0.235
-sanity_check,Step 3 sanity check: 10 tasks x 10 initial states x 1 seed,pi05,libero_spatial,100,0.224,0.457
-main_grid,Step 4 main grid on libero_spatial: 10 tasks x 50 initial states x 4 seeds,smolvla_n10,libero_spatial,2000,4.57,7.21
-main_grid,Step 4 main grid on libero_spatial: 10 tasks x 50 initial states x 4 seeds,smolvla,libero_spatial,2000,3.18,4.65
-main_grid,Step 4 main grid on libero_spatial: 10 tasks x 50 initial states x 4 seeds,pi05,libero_spatial,2000,4.04,8.71

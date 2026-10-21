@@ -129,7 +129,7 @@ class PolicyRunner:
         env_cfg = make_env_config("libero", task=suite, task_ids=[task_id], **self.spec.env)
         return make_env(env_cfg, n_envs=1)[suite][task_id]
 
-    def _run_episode(self, vec_env, key: EpisodeKey) -> dict:
+    def _run_episode(self, vec_env, key: EpisodeKey, render_callback=None) -> dict:
         sub_env = vec_env.envs[0].unwrapped
         n_init_states = len(sub_env._init_states)
         if key.init_state_id >= n_init_states:
@@ -153,6 +153,7 @@ class PolicyRunner:
                 preprocessor=self.preprocessor,
                 postprocessor=self.postprocessor,
                 seeds=[key.rng_seed],
+                render_callback=render_callback,
             )
         wall_time_s = time.perf_counter() - start
 
@@ -184,6 +185,40 @@ class PolicyRunner:
             "run_id": self.run_id,
             "timestamp": _now(),
         }
+
+    def rerun(self, key: EpisodeKey, record_frames: bool = False) -> tuple[dict, list]:
+        """Run one episode outside any store, for example to watch an episode of the grid again.
+
+        Returns its row and, if `record_frames`, the camera frames after the reset and after
+        each step (`episode_len + 1` of them). Rendering only reads the simulator, so the
+        episode is the same as without it. Nothing is written anywhere.
+        """
+        if (key.policy_id, key.policy_variant) != (self.spec.policy_id, self.spec.variant):
+            raise ValueError(f"{key} is not an episode of policy {self.spec.name}")
+        self._repo_commit = repo_commit()
+        frames: list = []
+
+        def record(vec_env) -> None:
+            frames.append(vec_env.envs[0].render())
+
+        vec_env = self._make_env(key.suite, key.task_id)
+        try:
+            row = self._run_episode(vec_env, key, record if record_frames else None)
+        finally:
+            vec_env.close()
+        return row, frames[: row["episode_len"] + 1]
+
+    def rerun_in_one_env(self, keys: list[EpisodeKey]) -> list[dict]:
+        """Run episodes of one task back to back in a single environment, as `run` does for a
+        shard, but outside any store. Returns their rows, in order."""
+        if len({(k.suite, k.task_id) for k in keys}) != 1:
+            raise ValueError("the keys must all belong to one task")
+        self._repo_commit = repo_commit()
+        vec_env = self._make_env(keys[0].suite, keys[0].task_id)
+        try:
+            return [self._run_episode(vec_env, key) for key in keys]
+        finally:
+            vec_env.close()
 
     def run(self, keys: list[EpisodeKey], store: EpisodeStore) -> dict:
         """Run the episodes of `keys` that `store` does not hold yet, saving after each one."""

@@ -1,6 +1,0 @@
-policy_id,policy_variant,n_episodes,n_identical,n_same_success,n_success,n_success_rerun
-lerobot/pi05_libero_finetuned,default,20,10,17,16,19
-lerobot/pi05_libero_finetuned,n_action_steps_10_nocompile,20,20,20,19,19
-lerobot/pi05_libero_finetuned,nocompile,20,20,20,18,18
-lerobot/smolvla_libero,default,20,20,20,13,13
-lerobot/smolvla_libero,n_action_steps_10,20,20,20,14,14

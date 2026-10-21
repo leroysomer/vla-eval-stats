@@ -1,6 +1,0 @@
-policy_id,harness_variant,stock_variant,n_episodes,n_success_harness,n_success_stock,n_same_outcome
-lerobot/pi05_libero_finetuned,default,default,20,16,17,15
-lerobot/pi05_libero_finetuned,n_action_steps_10_nocompile,default,20,19,17,16
-lerobot/pi05_libero_finetuned,nocompile,default,20,18,17,17
-lerobot/smolvla_libero,default,default,20,13,14,17
-lerobot/smolvla_libero,n_action_steps_10,default,20,14,14,16
