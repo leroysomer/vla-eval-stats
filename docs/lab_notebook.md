@@ -730,3 +730,47 @@ within the budget.
   Step 5 validation show their error control, not their stopping time near a small gap.
 - The sequential McNemar test includes the look at the last step of the budget (Step 5,
   clarification of the plan). It never mattered here: every evaluation stopped before step 500.
+
+## 2026-10-21 — Step 9: packaging
+
+Decisions (Nicholas): the main grid's per-episode data and the four main figures are tracked;
+other tables, figures, videos and data stay out of git. Section 5 of the plan is amended for
+the last-step look of the sequential McNemar test.
+
+- **Repository.**
+  - `README.md` and `docs/report.md` (about five pages) are written.
+  - `LICENSE` is MIT.
+  - CI is `.github/workflows/tests.yml`: lint, format check and the 33 tests, without LeRobot.
+  - `scripts/make_figures.sh` rebuilds every table and figure from `results/raw/main/` in 1.5
+    minutes of CPU, with `--with-validation` for the Step 5 tables.
+  - `.gitignore` tracks `results/raw/main/` (624 KB) and `figures/rq1.png`, `rq2_power.png`,
+    `rq2_gap.png`, `rq3.png`.
+- **Dependencies.** LeRobot moved to a dependency group `sim`, installed by default
+  (`tool.uv.default-groups`). The GPU machines see no change: the relock resolves the same 174
+  versions. CI and CPU-only machines use `uv sync --no-group sim`.
+- **Checked.** A copy of exactly the files git would commit, installed with
+  `--no-group sim`, rebuilt every table and figure; the tables and the four PNGs are
+  byte-identical to the originals. The README's toolkit example runs on plain CSVs.
+
+### Post hoc analysis: designs that run every task equally often (2026-10-21)
+
+Step 7 noted that the plan's unpaired design draws a random task for each rollout, so part of
+the saving it attributes to pairing comes from task balance alone. This is now computed in
+`scripts/analyze_rq2.py`. It adds rows `*_tasks_balanced` to `rq2_comparisons.csv` and the base
+"first policy, tasks balanced" to `rq2_gap.csv` and Figure 3. Earlier rows and tables are
+unchanged.
+
+| | Saving from pairing, random task per rollout (plan) | Saving, every task equally often |
+|---|---|---|
+| A vs A′, observed gap (formula) | 46% [41, 50] | 26% [20, 31] |
+| A vs B, observed gap (formula) | 12% [7, 17] | 3% [−1, 7] |
+| 2-point gap, discordance of A vs A′ held (plan's assumption) | 23% | −26% |
+| 2-point gap, within-task covariance of A vs A′ held | — | 37% (4,129 → 2,607 rollouts) |
+
+- Holding the discordance at 26.5% for a 2-point gap implies two policies that agree on a task
+  less often than independent ones would. In this setting the plan's extrapolation assumption
+  is not credible, so the covariance-held version is the one the README headline uses. Both
+  versions are on Figure 3 and in the report.
+- The README headline, "about 4,100 rollouts per policy, 2,600 paired (−37%)", is therefore a
+  post-hoc number, labelled as an assumption under the headline. The pre-registered version
+  (6,700 and 5,200) is in the README findings and in the report.

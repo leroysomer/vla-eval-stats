@@ -228,6 +228,13 @@ indicate a discordant pair, and $W_k$ be the sum of the first $k$ non-zero diffe
    Spending it over time according to the rollout count, not the count of informative pairs,
    is the alpha-spending idea of Lan and DeMets (1983), computed exactly here.
 
+   *Amendment of 2026-10-21 (decided on 2026-10-13, while implementing the test, after the
+   grid was run and before any comparison was computed).* Besides the steps at which a
+   discordant pair arrives, the test also looks once at the last step of the budget, $n = N$,
+   where it may use all the risk left. Without this look, item 4 would hold only when the last
+   pair happens to be discordant. Validity is unchanged: the total risk is still at most α. In
+   Step 8 no evaluation reached the last step, so the look changed no result.
+
 If the budget is reached without rejection, the test stops without a decision. This is not
 evidence that the two policies are equal.
 

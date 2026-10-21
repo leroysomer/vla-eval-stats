@@ -2411,9 +2411,10 @@ wheels = [
 name = "vla-eval-stats"
 version = "0.1.0"
 source = { editable = "." }
+default-groups = ["dev", "sim"]
 dependencies = [
-    { name = "lerobot", extra = ["evaluation", "libero", "pi", "smolvla"] },
     { name = "matplotlib" },
+    { name = "numpy" },
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "pyyaml" },
@@ -2428,11 +2429,14 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
 ]
+sim = [
+    { name = "lerobot", extra = ["evaluation", "libero", "pi", "smolvla"] },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "lerobot", extras = ["libero", "smolvla", "pi", "evaluation"], specifier = "==0.6.1" },
     { name = "matplotlib", specifier = ">=3.10" },
+    { name = "numpy", specifier = ">=2" },
     { name = "pandas", specifier = ">=2.0" },
     { name = "pyarrow", specifier = ">=21" },
     { name = "pyyaml", specifier = ">=6" },
@@ -2447,6 +2451,7 @@ dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.6" },
 ]
+sim = [{ name = "lerobot", extras = ["libero", "smolvla", "pi", "evaluation"], specifier = "==0.6.1" }]
 
 [[package]]
 name = "wandb"

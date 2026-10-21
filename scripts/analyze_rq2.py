@@ -65,6 +65,20 @@ def comparison_stats(y0: np.ndarray, y1: np.ndarray) -> dict[str, np.ndarray]:
     # The saving 2 Cov / sigma2_unpaired, split by the level the two policies share.
     for level in ("task", "init", "seed"):
         out[f"saving_from_{level}"] = 2 * out[f"cov_{level}"] / s2u
+    # Post hoc (lab notebook, Step 9): both designs run every task equally often, as most
+    # protocols do, instead of drawing the task of each rollout. The variances are then
+    # averages of the within-task variances, and the task part no longer counts in either.
+    t0, t1 = y0.mean((-2, -1)), y1.mean((-2, -1))
+    bt = ((y0 == 1) & (y1 == 0)).mean((-2, -1))
+    ct = ((y0 == 0) & (y1 == 1)).mean((-2, -1))
+    s2u_t = power.sigma2_unpaired(t0, t1).mean(-1)
+    s2p_t = power.sigma2_paired(bt, ct).mean(-1)
+    with np.errstate(divide="ignore"):
+        out["sigma2_unpaired_tasks_balanced"] = s2u_t
+        out["sigma2_paired_tasks_balanced"] = s2p_t
+        out["formula_n80_unpaired_tasks_balanced"] = power.formula_n(p1 - p0, s2u_t)
+        out["formula_n80_paired_tasks_balanced"] = power.formula_n(p1 - p0, s2p_t)
+        out["formula_saving_tasks_balanced"] = 1 - s2p_t / s2u_t
     return out
 
 
@@ -135,7 +149,11 @@ def gap_chart(y0: np.ndarray, y1: np.ndarray, gaps) -> pd.DataFrame:
     sigma2 = (b + c) - gap^2 (docs/plan.md, Section 4). Unpaired: the two policies at
     p - gap/2 and p + gap/2. The plan does not fix p, and the saving depends on it, so two
     bases are given: the rate of the first policy (the reference, used in the figure), and the
-    average of the two rates.
+    average of the two rates. A third row (post hoc) runs every task equally often in the
+    unpaired design, with task t at p_t - gap/2 and p_t + gap/2, p_t the first policy's rate on
+    it. Its paired variance is given two ways: with the discordance held (unchanged when the gap
+    is the same on every task), and with the within-task covariance of the two policies (shared
+    state and seed, from this comparison) held instead: sigma2 = sigma2_unpaired - 2 Cov.
     """
     discordance = (y0 != y1).mean()
     gaps = np.asarray(gaps, dtype=float)
@@ -149,6 +167,19 @@ def gap_chart(y0: np.ndarray, y1: np.ndarray, gaps) -> pd.DataFrame:
             "n80_unpaired": power.formula_n(gaps, s2u), "n80_paired": power.formula_n(gaps, s2p),
             "saving": 1 - s2p / s2u,
         }))  # fmt: skip
+    pt = y0.mean((-2, -1))
+    s2u = power.sigma2_unpaired(pt[None, :] - gaps[:, None] / 2, pt[None, :] + gaps[:, None] / 2).mean(1)  # fmt: skip
+    cov = components(y0, y1)
+    s2c = s2u - 2 * (cov.init + cov.seed)
+    frames.append(pd.DataFrame({
+        "unpaired_base": "first policy, tasks balanced", "gap": gaps, "base_rate": y0.mean(),
+        "discordance_b_plus_c": discordance,
+        "n80_unpaired": power.formula_n(gaps, s2u), "n80_paired": power.formula_n(gaps, s2p),
+        "saving": 1 - s2p / s2u,
+        "within_task_covariance": cov.init + cov.seed,
+        "n80_paired_covariance_held": power.formula_n(gaps, s2c),
+        "saving_covariance_held": 1 - s2c / s2u,
+    }))  # fmt: skip
     return pd.concat(frames, ignore_index=True)
 
 
@@ -215,29 +246,34 @@ def figure_power(curves: pd.DataFrame, table: pd.DataFrame, path: Path) -> None:
 def figure_gap(y0: np.ndarray, y1: np.ndarray, marks: pd.DataFrame, path: Path) -> None:
     style.apply()
     fine = gap_chart(y0, y1, np.linspace(0.01, 0.10, 200))
-    fig, ax = plt.subplots(figsize=(6.4, 4.2))
+    fig, ax = plt.subplots(figsize=(6.8, 4.6))
+    # Solid: the plan's assumptions (random task per rollout, discordance held). Dotted, post
+    # hoc: every task run equally often, the within-task covariance of A vs A′ held.
+    balanced = "first policy, tasks balanced"
     lines = [
-        ("unpaired", "first policy", "-", DESIGN_NAMES["unpaired"]),
-        ("unpaired", "average of the two", (0, (3, 2)), "unpaired, rates around the A, A′ average"),
-        ("paired", "first policy", "-", DESIGN_NAMES["paired"]),
-    ]
-    for design, base, linestyle, label in lines:
+        ("unpaired", "first policy", "n80_unpaired", "-", "unpaired, random task per rollout"),
+        ("paired", "first policy", "n80_paired", "-", "paired, discordance of A vs A′ held"),
+        ("unpaired", balanced, "n80_unpaired", (0, (1, 1.5)), "unpaired, every task equally often"),
+        ("paired", balanced, "n80_paired_covariance_held", (0, (1, 1.5)),
+         "paired, every task equally often,\nwithin-task covariance of A vs A′ held"),
+    ]  # fmt: skip
+    for design, base, column, linestyle, label in lines:
         f = fine[fine["unpaired_base"] == base]
         m = marks[marks["unpaired_base"] == base]
         color, solid = DESIGN_COLORS[design], linestyle == "-"
-        ax.plot(100 * f["gap"], f[f"n80_{design}"], color=color, linewidth=2 if solid else 1.2,
+        ax.plot(100 * f["gap"], f[column], color=color, linewidth=2 if solid else 1.6,
                 linestyle=linestyle, label=label)  # fmt: skip
         if not solid:
             continue
-        ax.plot(100 * m["gap"], m[f"n80_{design}"], "o", color=color, markersize=6,
+        ax.plot(100 * m["gap"], m[column], "o", color=color, markersize=6,
                 markeredgecolor="white", markeredgewidth=1.5)  # fmt: skip
-        for g, n in zip(m["gap"], m[f"n80_{design}"], strict=True):
+        for g, n in zip(m["gap"], m[column], strict=True):
             above = design == "unpaired"
             ax.annotate(f"{n:,.0f}", (100 * g, n), xytext=(6, 5) if above else (-6, -13),
                         ha="left" if above else "right", textcoords="offset points",
                         fontsize=8.5, color=INK_2)  # fmt: skip
     ax.set_yscale("log")
-    ax.set_ylim(100, 60_000)
+    ax.set_ylim(80, 60_000)
     ax.set_xlim(0.5, 10.6)
     ax.set_xticks(100 * np.array(GAPS), [f"{100 * g:.0f}" for g in GAPS])
     ax.set_xlabel("true gap between the two policies (points)")
@@ -247,9 +283,9 @@ def figure_gap(y0: np.ndarray, y1: np.ndarray, marks: pd.DataFrame, path: Path) 
     m = marks[marks["unpaired_base"] == "first policy"]
     p, disc = m["base_rate"].iloc[0], m["discordance_b_plus_c"].iloc[0]
     fig.text(0.01, 0.01,
-             f"Assumptions: paired, discordant pairs held at {100 * disc:.1f}% of keys, their rate "
-             f"for A vs A′; unpaired, rates {100 * p:.0f}% ± gap/2\n(A's rate; dashed: around the "
-             "A, A′ average). Two-sided α = 0.05; exact tests need a little more at small n.",
+             f"Solid: the plan's assumptions, rates {100 * p:.0f}% ± gap/2 (A's rate), discordant "
+             f"pairs held at {100 * disc:.1f}% of keys.\nDotted (post hoc): each task at A's rate "
+             "on it ± gap/2. Two-sided α = 0.05; exact tests need a little more at small n.",
              fontsize=7.5, color=INK_2, va="bottom")  # fmt: skip
     style.clean(ax, grid_axis="both")
     fig.tight_layout(rect=(0, 0.09, 1, 1))
